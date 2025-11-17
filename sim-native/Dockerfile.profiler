@@ -1,0 +1,36 @@
+# Profiler container for generating flamegraphs on Linux (avoids macOS Xcode requirement)
+# Use latest stable Rust to support edition2024
+FROM rust:latest
+
+WORKDIR /workspace
+
+# Install Perf (Linux performance analysis tool)
+# On Debian, install linux-perf package
+RUN rm -rf /var/lib/apt/lists/* && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends linux-perf && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* && \
+    which perf && perf --version
+
+# Install flamegraph via cargo (with BuildKit cache for faster rebuilds)
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    cargo install flamegraph
+
+# Create profiles directory (will be mounted as volume)
+RUN mkdir -p /workspace/profiles
+
+# Copy the workspace (scenarios will be mounted as volume)
+COPY sim-native/ /workspace/sim-native/
+
+# Copy and make executable the flamegraph runner script
+COPY sim-native/run-flamegraph.sh /usr/local/bin/run-flamegraph.sh
+RUN chmod +x /usr/local/bin/run-flamegraph.sh
+
+WORKDIR /workspace
+
+# Keep container running for exec commands
+CMD ["tail", "-f", "/dev/null"]
+

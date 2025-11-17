@@ -1,0 +1,26 @@
+# Rust build artifacts
+sim-wasm/target/
+sim-wasm/**/target/
+sim-native/target/
+sim-native/**/target/
+*.pdb
+
+# Node modules
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
