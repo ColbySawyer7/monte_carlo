@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 napi = { workspace = true }
@@ -15,5 +15,10 @@ rayon = { workspace = true }
 num_cpus = { workspace = true }
 sim-native-shared = { path = "../shared" }
 sim-native-des = { path = "../des" }
+pollster = { workspace = true, optional = true }
+
+[features]
+default = []
+gpu = ["sim-native-shared/gpu", "dep:pollster"]
 
 

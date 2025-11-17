@@ -6,8 +6,16 @@ This directory contains the Rust implementation of the DES and Monte Carlo simul
 ### DES:
 cargo run --release --bin bench --manifest-path sim-native/bench/Cargo.toml -- backend/sim/des/scenarios/baseline.json
 
-### Monte Carlo:
+### Monte Carlo (CPU only):
 cargo run --release --bin bench --manifest-path sim-native/bench/Cargo.toml -- backend/sim/des/scenarios/baseline.json --monte --iterations 50
+
+### Monte Carlo (with GPU acceleration):
+cargo run --release --bin bench --manifest-path sim-native/bench/Cargo.toml --features gpu -- backend/sim/des/scenarios/baseline.json --monte --iterations 50
+
+**Note:** The benchmark will display GPU status when running Monte Carlo simulations:
+- `✓ GPU acceleration: AVAILABLE` - GPU is detected and will be used
+- `✗ GPU acceleration: NOT AVAILABLE` - GPU not detected, using CPU
+- `ℹ GPU acceleration: DISABLED` - GPU feature not enabled at build time
 
 ### Flamegraph (DES):
 cargo flamegraph --bin bench --manifest-path sim-native/bench/Cargo.toml -- backend/sim/des/scenarios/baseline.json

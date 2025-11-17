@@ -13,6 +13,9 @@ use sim_native_des::{run_simulation_internal, Scenario, Options, State, StateTab
 use sim_native_monte::{run_monte_carlo_internal, MonteCarloOptions};
 use serde_json::Value;
 
+#[cfg(feature = "gpu")]
+use sim_native_shared::gpu::GpuContext;
+
 fn create_mock_state(_scenario: &Scenario) -> State {
     // Use default units (can be customized based on scenario if needed)
     let units = vec!["VMU-1".to_string(), "VMU-3".to_string()];
@@ -118,6 +121,21 @@ fn main() {
         println!("Scenario: {}", scenario_path);
         println!("Horizon: {} hours", scenario.horizon_hours);
         println!("Iterations: {}", iterations);
+        
+        // Check GPU availability
+        #[cfg(feature = "gpu")]
+        {
+            if GpuContext::is_available() {
+                println!("✓ GPU acceleration: AVAILABLE (using GPU for statistics aggregation)");
+            } else {
+                println!("✗ GPU acceleration: NOT AVAILABLE (using CPU for all computations)");
+            }
+        }
+        #[cfg(not(feature = "gpu"))]
+        {
+            println!("ℹ GPU acceleration: DISABLED (build with --features gpu to enable)");
+        }
+        println!();
         
         let monte_options = MonteCarloOptions {
             iterations: Some(iterations),
