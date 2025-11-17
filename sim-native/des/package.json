@@ -1,0 +1,14 @@
+{
+  "name": "sim-native-des",
+  "version": "0.1.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "sim-native-des",
+    "triples": {
+      "defaults": true,
+      "additional": []
+    }
+  }
+}
+

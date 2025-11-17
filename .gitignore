@@ -3,3 +3,13 @@
 frontend/dist/
 node_modules
 package-lock.json
+
+# Rust build artifacts
+sim-native/target/
+sim-native/**/target/
+sim-native/**/*.node
+sim-native/**/npm/
+sim-native/**/Cargo.lock
+
+# Native addon build outputs (can be rebuilt, but uncomment next line to track them)
+backend/wasm/pkg/**/*.node

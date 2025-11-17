@@ -1,0 +1,14 @@
+{
+  "name": "sim-native-monte",
+  "version": "0.1.0",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "napi": {
+    "name": "sim-native-monte",
+    "triples": {
+      "defaults": true,
+      "additional": []
+    }
+  }
+}
+
