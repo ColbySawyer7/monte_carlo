@@ -1,0 +1,45 @@
+services:
+
+  backend:
+    container_name: sorsim-backend
+    build:
+      context: backend
+    restart: always
+    env_file: .env
+    ports:
+      - "${BACKEND_API_PORT:-3009}:${BACKEND_API_PORT:-3009}"
+    volumes:
+      # Bind mount: sync host code to container for live development
+      - ./backend:/sorsim/backend
+      - ./frontend/dist:/sorsim/frontend/dist
+      # Named volume: preserve container's node_modules (prevents host overwrite)
+      - backend_node_modules:/sorsim/backend/node_modules
+    networks:
+      - alp
+
+  frontend:
+    container_name: sorsim-frontend
+    build:
+      context: frontend
+    restart: always
+    env_file: .env
+    ports:
+      - "${VITE_FRONTEND_PORT:-3010}:${VITE_FRONTEND_PORT:-3010}"
+    volumes:
+      # Bind mount: sync host code to container for live development
+      - ./frontend:/sorsim/frontend
+      # Named volume: preserve container's node_modules (prevents host overwrite)
+      - frontend_node_modules:/sorsim/frontend/node_modules
+    networks:
+      - alp
+    depends_on:
+      - backend
+
+networks:
+  alp:
+    name: alp_net
+    external: true
+
+volumes:
+  backend_node_modules:
+  frontend_node_modules:

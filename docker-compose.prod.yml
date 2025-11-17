@@ -1,0 +1,33 @@
+services:
+
+  backend:
+    container_name: sorsim-backend
+    image: ${CI_REGISTRY_IMAGE}/sorsim-backend:latest
+    restart: always
+    env_file: .env
+    networks:
+      - alp
+    volumes:
+      - frontend_dist:/sorsim/frontend/dist
+    command: [ "npm", "run", "prod" ]
+
+  frontend:
+    container_name: sorsim-frontend
+    image: ${CI_REGISTRY_IMAGE}/sorsim-frontend:latest
+    restart: always
+    env_file: .env
+    networks:
+      - alp
+    volumes:
+      - frontend_dist:/sorsim/frontend/dist
+    depends_on:
+      - backend
+    command: [ "npm", "run", "preview" ]
+
+networks:
+  alp:
+    name: alp_net
+    external: true
+
+volumes:
+  frontend_dist:

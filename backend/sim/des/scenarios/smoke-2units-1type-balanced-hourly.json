@@ -1,0 +1,57 @@
+{
+  "name": "Smoke: 2 units, 1 type, balanced hourly",
+  "description": "Predictable smoke test. Deterministic hourly demand (0h..7h) with mission split 50/50 across VMU-1 and VMU-3. Flight time 1.0h, no other times. Expected (with ≥1 aircraft/pilot/SO per unit): Request=8, Start=8, Complete=8; per-unit completions ≈4; utilization per resource per unit ≈ 1/8 = 12.5%.",
+  "questions": [
+    "Are missions distributed according to mission_split?",
+    "Do per-unit completions match expected evenly split throughput?"
+  ],
+  "horizon_hours": 8,
+  "unit_policy": {
+    "assignment": "by_unit",
+    "mission_split": {
+      "VMU-1": 0.5,
+      "VMU-3": 0.5
+    }
+  },
+  "demand": [
+    {
+      "type": "deterministic",
+      "mission_type": "SMK",
+      "every_hours": 1.0,
+      "start_at_hours": 0.0
+    }
+  ],
+  "mission_types": [
+    {
+      "name": "SMK",
+      "priority": 1,
+      "required_payload_types": [],
+      "required_aircrew": {
+        "pilot": 1,
+        "so": 1
+      },
+      "flight_time": {
+        "type": "deterministic",
+        "value_hours": 1.0
+      }
+    }
+  ],
+  "process_times": {
+    "preflight": {
+      "type": "deterministic",
+      "value_hours": 0
+    },
+    "postflight": {
+      "type": "deterministic",
+      "value_hours": 0
+    },
+    "turnaround": {
+      "type": "deterministic",
+      "value_hours": 0
+    },
+    "mount_times": {}
+  },
+  "constraints": {
+    "queueing": "reject_if_unavailable"
+  }
+}

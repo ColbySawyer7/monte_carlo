@@ -1,0 +1,113 @@
+{
+  "name": "Does 80/20 unit split improve throughput?",
+  "description": "Shifts 80% of missions to VMU-1 to test effects of asymmetric loading on rejections and utilization across units.",
+  "questions": [
+    "Does concentrating missions on VMU-1 increase rejections or idle capacity at VMU-3?",
+    "What unit split balances utilization across aircraft and crews?",
+    "How sensitive are results to split under this mission mix?"
+  ],
+  "horizon_hours": 24,
+  "unit_policy": {
+    "assignment": "by_unit",
+    "mission_split": {
+      "VMU-1": 0.8,
+      "VMU-3": 0.2
+    }
+  },
+  "demand": [
+    {
+      "mission_type": "MIR",
+      "rate_per_hour": 1.8
+    },
+    {
+      "mission_type": "SCAR",
+      "rate_per_hour": 0.7
+    },
+    {
+      "mission_type": "ES",
+      "rate_per_hour": 0.5
+    }
+  ],
+  "mission_types": [
+    {
+      "name": "MIR",
+      "priority": 2,
+      "required_payload_types": [],
+      "required_aircrew": {
+        "pilot": 1,
+        "so": 1
+      },
+      "flight_time": {
+        "type": "triangular",
+        "a": 3,
+        "m": 4,
+        "b": 6
+      }
+    },
+    {
+      "name": "SCAR",
+      "priority": 1,
+      "required_payload_types": [
+        "SkyTower II"
+      ],
+      "required_aircrew": {
+        "pilot": 1,
+        "so": 1
+      },
+      "flight_time": {
+        "type": "triangular",
+        "a": 4,
+        "m": 5.5,
+        "b": 8
+      }
+    },
+    {
+      "name": "ES",
+      "priority": 1,
+      "required_payload_types": [
+        "EW Pod"
+      ],
+      "required_aircrew": {
+        "pilot": 1,
+        "so": 1
+      },
+      "flight_time": {
+        "type": "triangular",
+        "a": 2,
+        "m": 3,
+        "b": 5
+      }
+    }
+  ],
+  "process_times": {
+    "preflight": {
+      "type": "deterministic",
+      "value_hours": 0.75
+    },
+    "postflight": {
+      "type": "deterministic",
+      "value_hours": 0.5
+    },
+    "turnaround": {
+      "type": "deterministic",
+      "value_hours": 0.25
+    },
+    "mount_times": {
+      "SkyTower II": {
+        "type": "triangular",
+        "a": 0.5,
+        "m": 0.75,
+        "b": 1.5
+      },
+      "EW Pod": {
+        "type": "triangular",
+        "a": 0.4,
+        "m": 0.6,
+        "b": 1.2
+      }
+    }
+  },
+  "constraints": {
+    "queueing": "reject_if_unavailable"
+  }
+}

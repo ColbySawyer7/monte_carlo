@@ -1,0 +1,166 @@
+stages:
+  - build # build the docker files
+  - deploy # push the docker images
+  - release # create release for production and compose up the prod compose
+
+variables:
+  # the names that will be given to the docker images to be built
+  IMAGE_BACKEND:  ${CI_REGISTRY_IMAGE}/${CI_PROJECT_NAME}-backend
+  IMAGE_FRONTEND: ${CI_REGISTRY_IMAGE}/${CI_PROJECT_NAME}-frontend
+
+build_docker_files:
+  stage: build
+  tags:
+    # use 'online' tagged runner in order to pull appropriate base images
+    - online
+  image:
+    name: ${CI_REGISTRY}/attollo/glcr/dinu:latest # custom `docker in ubuntu` base image
+    pull_policy: never
+  before_script:
+    # extract version from backend package.json
+    - BACKEND_VERSION=$(grep '"version"' backend/package.json | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' | tr -d '\r')
+    - echo "BACKEND_VERSION=${BACKEND_VERSION}"
+    # extract version from frontend package.json
+    - FRONTEND_VERSION=$(grep '"version"' frontend/package.json | head -1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' | tr -d '\r')
+    - echo "FRONTEND_VERSION=${FRONTEND_VERSION}"
+    # create a env file for downstream jobs
+    - echo "BACKEND_VERSION=${BACKEND_VERSION}" >> build_docker_files.env
+    - echo "FRONTEND_VERSION=${FRONTEND_VERSION}" >> build_docker_files.env
+  script:
+    - docker info
+    # function to check if image exists locally and build if not
+    - |
+      build_if_not_exists() {
+        local image_name=$1
+        local dockerfile_path=$2
+        local version=$3
+        if docker image inspect ${image_name}:${version} >/dev/null 2>&1; then
+          echo "Image ${image_name}:${version} already exists locally, skipping build"
+        else
+          echo "Building ${image_name}:${version} from ${dockerfile_path}"
+          docker build -t ${image_name}:${version} ${dockerfile_path}
+        fi
+      }
+    # build images only if they don't exist locally with their respective versions
+    - build_if_not_exists ${IMAGE_BACKEND}  ./backend  ${BACKEND_VERSION}
+    - build_if_not_exists ${IMAGE_FRONTEND} ./frontend ${FRONTEND_VERSION}
+    # tag all images as 'latest' for docker-compose-prod compatibility
+    - docker tag ${IMAGE_BACKEND}:${BACKEND_VERSION}   ${IMAGE_BACKEND}:latest
+    - docker tag ${IMAGE_FRONTEND}:${FRONTEND_VERSION} ${IMAGE_FRONTEND}:latest
+  after_script:
+    # clean up dangling images
+    - docker image prune -f
+  artifacts:
+    reports:
+      dotenv: build_docker_files.env
+  only:
+    - master
+
+push_docker_images:
+  stage: deploy
+  needs:
+    - build_docker_files
+  tags:
+    - online
+  image:
+    name: ${CI_REGISTRY}/attollo/glcr/dinu:latest # custom `docker in ubuntu` base image
+    pull_policy: never
+  script:
+    # login to container registry and push images
+    - echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
+    # push version images with their respective versions
+    - docker push ${IMAGE_BACKEND}:${BACKEND_VERSION}
+    - docker push ${IMAGE_FRONTEND}:${FRONTEND_VERSION}
+    # push latest images
+    - docker push ${IMAGE_BACKEND}:latest
+    - docker push ${IMAGE_FRONTEND}:latest
+  only:
+    - master
+
+release:
+  stage: release
+  needs:
+    - build_docker_files
+    - push_docker_images
+  tags:
+    - lxc1
+  image:
+    name: registry.gitlab.com/gitlab-org/release-cli:latest
+    pull_policy: if-not-present
+  before_script:
+    # check needed variables in the environment
+    - echo "BACKEND_VERSION=${BACKEND_VERSION}"
+    - echo "FRONTEND_VERSION=${FRONTEND_VERSION}"
+    # ensure local tags are up to date with remote tags
+    - echo "Syncing local tags with remote"
+    - git tag --list | xargs git tag -d
+    - git fetch --tags
+    - git tag --list
+  script:
+    - echo "Setting release and tag to ${FRONTEND_VERSION}"
+    # generate changelog dynamically based on git history
+    - LAST_TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+    - echo "Last tag was $LAST_TAG"
+    - CHANGELOG_DATE=$(date +"%Y-%m-%d")
+    - CHANGELOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- ✨ [%h](${CI_PROJECT_URL}/-/commit/%H) 👤 %ae 📄 %s")
+    # create a single release for all docker images with links to docker image paths
+    - |
+      release-cli create --name "${FRONTEND_VERSION} $CI_COMMIT_REF_NAME $CHANGELOG_DATE" --tag-name "${FRONTEND_VERSION}" \
+        --assets-link "{
+          \"name\":\"backend:${BACKEND_VERSION}\",
+          \"url\":\"http://${CI_REGISTRY_IMAGE}/${CI_PROJECT_NAME}-backend:${BACKEND_VERSION}\",
+          \"link_type\":\"image\"
+        }" \
+        --assets-link "{
+          \"name\":\"frontend:${FRONTEND_VERSION}\",
+          \"url\":\"http://${CI_REGISTRY_IMAGE}/${CI_PROJECT_NAME}-frontend:${FRONTEND_VERSION}\",
+          \"link_type\":\"image\"
+        }" \
+        --description "## Changelog $CHANGELOG_DATE $CHANGELOG"
+  only:
+    - master
+
+run_docker_containers:
+  stage: release
+  needs:
+    - push_docker_images
+  tags:
+    - lxc1
+  image:
+    name: ${CI_REGISTRY}/attollo/glcr/dinu:latest # custom `docker in ubuntu` base image
+    pull_policy: if-not-present
+  script:
+    # login to container registry
+    - docker login -u ${CI_REGISTRY_USER} -p ${CI_REGISTRY_PASSWORD} ${CI_REGISTRY}
+    # pull latest images from registry
+    - docker pull ${CI_REGISTRY_IMAGE}/sorsim-backend:latest
+    - docker pull ${CI_REGISTRY_IMAGE}/sorsim-frontend:latest
+    # tag images locally for easier reference
+    - docker tag ${CI_REGISTRY_IMAGE}/sorsim-backend:latest sorsim-backend:latest
+    - docker tag ${CI_REGISTRY_IMAGE}/sorsim-frontend:latest sorsim-frontend:latest
+    # create .env file for docker containers
+    - |
+      cat > .env <<EOF
+      DB_HOST=${DB_HOST}
+      DB_USER=${DB_USER}
+      DB_PASSWORD=${DB_PASSWORD}
+      DB_NAME=${DB_NAME}
+      DB_PORT=${DB_PORT}
+      CI_REGISTRY_IMAGE=${CI_REGISTRY_IMAGE}
+      EOF
+    # verify compose files exist
+    - ls -la docker-compose*.yml
+    - cat docker-compose.prod.yml
+    # stop and remove existing containers and volumes using both files
+    - docker compose -f docker-compose.yml -f docker-compose.prod.yml down -v || true
+    # start containers using ONLY prod compose (no volumes from base compose)
+    - docker compose -f docker-compose.prod.yml up -d --force-recreate
+    # ensure frontend dist is built
+    - docker compose exec -it frontend npm run build
+  environment:
+    name: production
+    url: http://192.168.1.21:4600
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master"
+      when: on_success
+  

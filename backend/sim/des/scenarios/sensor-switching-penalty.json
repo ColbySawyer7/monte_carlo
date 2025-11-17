@@ -1,0 +1,97 @@
+{
+  "name": "Sensor switching penalty",
+  "description": "Quantify sortie loss from frequent sensor switching with moderate mount penalties.",
+  "questions": [
+    "If missions require frequent switching between sensors, how many completions are lost?",
+    "Does rebalancing demand across units (via Unit Split) reduce the penalty?"
+  ],
+  "horizon_hours": 24,
+  "unit_policy": {
+    "assignment": "by_unit",
+    "mission_split": {
+      "VMU-1": 0.6,
+      "VMU-3": 0.4
+    }
+  },
+  "demand": [
+    {
+      "mission_type": "MIR",
+      "rate_per_hour": 1.0
+    },
+    {
+      "mission_type": "ES",
+      "rate_per_hour": 1.2
+    }
+  ],
+  "mission_types": [
+    {
+      "name": "MIR",
+      "priority": 2,
+      "required_payload_types": [
+        "SkyTower II"
+      ],
+      "required_aircrew": {
+        "pilot": 1,
+        "so": 1
+      },
+      "flight_time": {
+        "type": "triangular",
+        "a": 2.5,
+        "m": 3.5,
+        "b": 5
+      }
+    },
+    {
+      "name": "ES",
+      "priority": 3,
+      "required_payload_types": [
+        "SmartSensor"
+      ],
+      "required_aircrew": {
+        "pilot": 1,
+        "so": 1
+      },
+      "flight_time": {
+        "type": "triangular",
+        "a": 3,
+        "m": 4.5,
+        "b": 6.5
+      }
+    }
+  ],
+  "process_times": {
+    "preflight": {
+      "type": "deterministic",
+      "value_hours": 0.75
+    },
+    "postflight": {
+      "type": "deterministic",
+      "value_hours": 0.5
+    },
+    "turnaround": {
+      "type": "deterministic",
+      "value_hours": 0.25
+    },
+    "mount_times": {
+      "SkyTower II": {
+        "type": "deterministic",
+        "value_hours": 0.35
+      },
+      "EW Pod": {
+        "type": "deterministic",
+        "value_hours": 0.2
+      },
+      "SmartSensor": {
+        "type": "deterministic",
+        "value_hours": 0.4
+      },
+      "Extended Range Tank": {
+        "type": "deterministic",
+        "value_hours": 0.15
+      }
+    }
+  },
+  "constraints": {
+    "queueing": "reject_if_unavailable"
+  }
+}
