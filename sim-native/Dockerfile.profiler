@@ -15,6 +15,8 @@ RUN rm -rf /var/lib/apt/lists/* && \
 
 # Install flamegraph via cargo (with BuildKit cache for faster rebuilds)
 ENV PATH="/root/.cargo/bin:${PATH}"
+# Set RUSTFLAGS to force frame pointers for better flamegraph symbol resolution
+ENV RUSTFLAGS="-C force-frame-pointers=yes"
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     cargo install flamegraph

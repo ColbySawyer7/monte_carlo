@@ -15,9 +15,17 @@ fi
 
 cd /workspace
 
+# Ensure RUSTFLAGS are set for frame pointers (backup if not set in Dockerfile)
+export RUSTFLAGS="${RUSTFLAGS:--C force-frame-pointers=yes}"
+
 # Create profiles directory if it doesn't exist and ensure proper permissions
 mkdir -p profiles
 chmod 777 profiles 2>/dev/null || true
+
+# Clean build cache to ensure fresh build with RUSTFLAGS
+# This is important because cached builds might not have frame pointers
+echo "Cleaning build cache to ensure fresh build with frame pointers..."
+cargo clean --manifest-path sim-native/bench/Cargo.toml 2>/dev/null || true
 
 # Generate filename based on datetime
 TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
@@ -25,8 +33,11 @@ TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
 if [ "$MODE" = "des" ]; then
     OUTPUT_FILE="profiles/flamegraph-des-${TIMESTAMP}.svg"
     echo "Generating DES flamegraph for scenario: $SCENARIO_FILE"
+    echo "Using RUSTFLAGS: $RUSTFLAGS"
     # Use higher frequency for better sampling on fast programs
-    cargo flamegraph \
+    # Force frame pointers for better function names in flamegraphs
+    # PERF_ARGS passes options directly to perf for DWARF unwinding
+    PERF_ARGS="--call-graph dwarf" cargo flamegraph \
         --freq 997 \
         --bin bench \
         --manifest-path sim-native/bench/Cargo.toml \
@@ -52,8 +63,11 @@ else
         PROF_ITERATIONS=1000
     fi
     OUTPUT_FILE="profiles/flamegraph-monte-${TIMESTAMP}.svg"
+    echo "Using RUSTFLAGS: $RUSTFLAGS"
     # Use higher frequency for better sampling on fast programs
-    cargo flamegraph \
+    # Force frame pointers for better function names in flamegraphs
+    # PERF_ARGS passes options directly to perf for DWARF unwinding
+    PERF_ARGS="--call-graph dwarf" cargo flamegraph \
         --freq 997 \
         --bin bench \
         --manifest-path sim-native/bench/Cargo.toml \
