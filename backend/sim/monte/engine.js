@@ -140,6 +140,10 @@ async function runMonteCarlo(scenario, options = {}) {
   const keepIterations = options.keepIterations || false;
   const individualResults = [];
   
+  // TODO: Initialize percentile timeline candidates
+  // Track candidates for P10, P50, P90 based on missions.completed metric
+  // Structure: { p10: { value: null, timeline: null }, p50: {...}, p90: {...} }
+  
   // Run DES engine multiple times
   // Each iteration uses different random samples, producing different outcomes
   // Note: We always store results temporarily for aggregation, regardless of keepIterations flag
@@ -147,6 +151,11 @@ async function runMonteCarlo(scenario, options = {}) {
   for (let i = 0; i < iterations; i++) {
     const singleRun = await runSimulation(scenario, options);
     individualResults.push(singleRun);
+    
+    // TODO: Update percentile timeline candidates
+    // After each iteration, check if this iteration is closer to P10/P50/P90 than current candidates
+    // Use missions.completed as the metric to determine percentile position
+    // Store the timeline from the iteration closest to each percentile
   }
   
   // Build aggregated results structure
@@ -220,6 +229,13 @@ async function runMonteCarlo(scenario, options = {}) {
   if (keepIterations) {
     aggregated.iterations = individualResults;
   }
+  
+  // TODO: Track percentile timeline candidates incrementally
+  // Since we use Welford's algorithm for statistics (don't store all iterations),
+  // we need to track the iteration closest to P10, P50, P90 percentiles as we process.
+  // Compare each iteration's missions.completed against current percentile candidates
+  // and update candidates when closer to target percentile.
+  // Structure: percentile_timelines = { p10: timeline, p50: timeline, p90: timeline }
   
   // Include initial resources from first iteration (same across all iterations)
   if (individualResults.length > 0 && individualResults[0].initial_resources) {

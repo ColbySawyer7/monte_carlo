@@ -7,6 +7,7 @@ import Staffing from './views/Staffing.vue'
 import Unit from './views/Unit.vue'
 
 import DES from './views/DES.vue'
+import Monte from './views/Monte.vue'
 
 import Training from './views/Training.vue'
 import Readiness from './views/Readiness.vue'
@@ -115,9 +116,7 @@ function applyTheme() {
         <Payload v-else-if="activeTab === 'payload'" />
         <Staffing v-else-if="activeTab === 'staffing'" />
         <Unit v-else-if="activeTab === 'unit'" />
-        <div v-else-if="activeTab === 'monte'" class="tab-panel">
-          Monte content
-        </div>
+        <Monte v-else-if="activeTab === 'monte'" />
         <DES v-else-if="activeTab === 'des'" />
         <div v-else-if="activeTab === 'abs'" class="tab-panel">
           ABS content
