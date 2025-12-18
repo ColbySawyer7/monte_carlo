@@ -1,0 +1,74 @@
+/* Theme Config */
+:root {
+    --theme-color-1: rgb(255, 111, 0);
+    --theme-color-2: rgb(0, 0, 0);
+    --theme-color-3: rgb(56, 56, 56);
+    --theme-color-4: rgb(215, 215, 220);
+}
+
+/* General Reset */
+body,
+h1,
+ul,
+li,
+a {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Body Styling */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: var(--theme-color-3);
+    color: var(--theme-color-2);
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    min-height: 100vh;
+    margin: 0;
+    padding: 20px;
+}
+
+/* Container Styling */
+body>ul {
+    list-style: none;
+    padding: 20px;
+    background: var(--theme-color-2);
+    border-radius: 10px;
+    box-shadow: 0 4px 6px var(--theme-color-1);
+    max-width: 400px;
+    width: 100%;
+    text-align: left;
+    margin-top: 0;
+}
+
+/* Header Styling */
+h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+    color: var(--theme-color-2);
+    text-align: left;
+}
+
+/* Link Styling */
+a {
+    text-decoration: none;
+    color: var(--theme-color-4);
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    border-radius: 5px;
+    transition: all 0.3s ease;
+    background-color: var(--theme-color-2);
+    margin-bottom: 10px;
+    gap: 10px;
+}
+
+/* Hover Effect */
+a:hover {
+    background-color: var(--theme-color-2);
+    color: var(--theme-color-1);
+    box-shadow: 0 4px 6px var(--theme-color-1);
+}

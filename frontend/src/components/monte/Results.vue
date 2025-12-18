@@ -13,6 +13,14 @@ interface AggregatedStatistics {
   stddev: number
 }
 
+interface PercentileTimeline {
+  timeline: any[]
+  rawTimeline: any[]
+  availabilityTimeline: any | null
+  missionsCompleted: number
+  stddev: number
+}
+
 interface MonteCarloResults {
   iterations: number
   horizon_hours: number
@@ -20,8 +28,20 @@ interface MonteCarloResults {
   rejections: Record<string, AggregatedStatistics>
   utilization: Record<string, Record<string, AggregatedStatistics>>
   by_type?: Record<string, Record<string, AggregatedStatistics>>
-  // TODO: Add percentile_timelines?: { p10?: any[], p50?: any[], p90?: any[] }
-  // Each timeline matches DES timeline format (array of mission/rejection events)
+  percentile_timelines?: Record<string, PercentileTimeline>
+  initial_resources?: {
+    units: string[]
+    aircraftByUnit: Record<string, number>
+    staffingByUnit: Record<string, { pilot: number; so: number; intel: number }>
+    payloadByUnit: Record<string, Record<string, number>>
+    overrides_applied: boolean
+  }
+  unitSplit?: { vmu1: number; vmu3: number }
+  personnel_availability?: {
+    '7318'?: { daily_crew_rest_hours?: number }
+    '7314'?: { daily_crew_rest_hours?: number }
+    '0231'?: { daily_crew_rest_hours?: number }
+  }
 }
 
 interface Props {
@@ -47,6 +67,23 @@ function formatStatWithRange(stat: AggregatedStatistics | null | undefined): str
   if (!stat) return '—'
   return `${formatNumber(stat.mean)} [${formatNumber(stat.p10)}-${formatNumber(stat.p90)}]`
 }
+
+// Get percentile explanation
+function getPercentileExplanation(percentile: string): string {
+  const explanations: Record<string, string> = {
+    p10: '10% of runs had this value or better (optimistic scenario)',
+    p25: '25% of runs had this value or better',
+    p50: '50% of runs had this value or better (median - typical outcome)',
+    p75: '75% of runs had this value or better',
+    p90: '90% of runs had this value or better (pessimistic scenario)',
+    p95: '95% of runs had this value or better',
+    p99: '99% of runs had this value or better',
+    mean: 'Average across all simulation runs',
+    min: 'Best case outcome across all runs',
+    max: 'Worst case outcome across all runs'
+  }
+  return explanations[percentile] || ''
+}
 </script>
 
 <template>
@@ -56,27 +93,69 @@ function formatStatWithRange(stat: AggregatedStatistics | null | undefined): str
     </div>
 
     <div v-else class="results-content">
+      <!-- Info Section -->
+      <div class="info-section">
+        <div class="info-header">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="16" x2="12" y2="12" />
+            <line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+          <span class="info-title">Understanding Your Results</span>
+        </div>
+        <div class="info-content">
+          <p class="info-text">
+            <strong>Mean:</strong> The average outcome across all {{ results.iterations.toLocaleString() }} simulation runs.
+          </p>
+          <p class="info-text">
+            <strong>Median (P50):</strong> The middle value - half of all runs had better results, half had worse. This is often more representative than the mean.
+          </p>
+          <p class="info-text">
+            <strong>Range [P10-P90]:</strong> Shows the spread of results. P10 is the optimistic scenario (10% of runs did better), P90 is the pessimistic scenario (90% of runs did better). Most outcomes fall within this range.
+          </p>
+          <p class="info-text">
+            <strong>Standard Deviation (±):</strong> Measures how much results vary. A smaller number means more consistent outcomes.
+          </p>
+        </div>
+      </div>
+
       <!-- Summary Stats -->
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-label">Requested</div>
+          <div class="stat-label">
+            Requested
+            <span class="stat-help" :title="'Total number of missions that were requested during the simulation period'">ⓘ</span>
+          </div>
           <div class="stat-value">{{ formatStat(results.missions?.requested) }}</div>
-          <div class="stat-subtitle">Mean (Median)</div>
+          <div class="stat-subtitle">Average (Typical)</div>
+          <div class="stat-explanation">Average across all runs, with typical outcome in parentheses</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Started</div>
+          <div class="stat-label">
+            Started
+            <span class="stat-help" :title="'Number of missions that successfully began (had required resources available)'">ⓘ</span>
+          </div>
           <div class="stat-value">{{ formatStat(results.missions?.started) }}</div>
-          <div class="stat-subtitle">Mean (Median)</div>
+          <div class="stat-subtitle">Average (Typical)</div>
+          <div class="stat-explanation">Average across all runs, with typical outcome in parentheses</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Completed</div>
+          <div class="stat-label">
+            Completed
+            <span class="stat-help" :title="'Number of missions that finished successfully'">ⓘ</span>
+          </div>
           <div class="stat-value">{{ formatStat(results.missions?.completed) }}</div>
-          <div class="stat-subtitle">Mean (Median)</div>
+          <div class="stat-subtitle">Average (Typical)</div>
+          <div class="stat-explanation">Average across all runs, with typical outcome in parentheses</div>
         </div>
         <div class="stat-card rejected">
-          <div class="stat-label">Rejected</div>
+          <div class="stat-label">
+            Rejected
+            <span class="stat-help" :title="'Number of missions that could not be started due to missing resources (aircraft, crew, or payload)'">ⓘ</span>
+          </div>
           <div class="stat-value">{{ formatStat(results.missions?.rejected) }}</div>
-          <div class="stat-subtitle">Mean (Median)</div>
+          <div class="stat-subtitle">Average (Typical)</div>
+          <div class="stat-explanation">Average across all runs, with typical outcome in parentheses</div>
         </div>
       </div>
 
@@ -90,7 +169,13 @@ function formatStatWithRange(stat: AggregatedStatistics | null | undefined): str
 
       <!-- Rejections Breakdown -->
       <div class="rejections-section">
-        <div class="section-title">Rejections (Mean [P10-P90])</div>
+        <div class="section-title">
+          Rejections by Resource Type
+          <span class="section-help" :title="'Shows why missions were rejected. Format: Average [Optimistic-Pessimistic range]'">ⓘ</span>
+        </div>
+        <div class="section-description">
+          Average number of rejections, with range showing optimistic (P10) to pessimistic (P90) scenarios
+        </div>
         <div class="rejections-grid">
           <div class="rejection-item">
             <span class="rejection-label">Aircraft</span>
@@ -113,7 +198,13 @@ function formatStatWithRange(stat: AggregatedStatistics | null | undefined): str
 
       <!-- Utilization -->
       <div class="utilization-section">
-        <div class="section-title">Utilization (Mean [P10-P90])</div>
+        <div class="section-title">
+          Resource Utilization
+          <span class="section-help" :title="'Percentage of time resources are actively in use. Format: Average [Optimistic-Pessimistic range]'">ⓘ</span>
+        </div>
+        <div class="section-description">
+          Average utilization percentage, with range showing optimistic (P10) to pessimistic (P90) scenarios
+        </div>
         <div v-for="(util, unit) in results.utilization" :key="unit" class="unit-utilization">
           <div class="unit-name">{{ unit }}</div>
           <div class="util-rows">
@@ -144,7 +235,13 @@ function formatStatWithRange(stat: AggregatedStatistics | null | undefined): str
 
       <!-- By Mission Type -->
       <div v-if="results.by_type && Object.keys(results.by_type).length > 0" class="by-type-section">
-        <div class="section-title">By Mission Type (Mean [P10-P90])</div>
+        <div class="section-title">
+          Results by Mission Type
+          <span class="section-help" :title="'Breakdown of mission statistics for each mission type. Format: Average [Optimistic-Pessimistic range]'">ⓘ</span>
+        </div>
+        <div class="section-description">
+          Average outcomes per mission type, with range showing optimistic (P10) to pessimistic (P90) scenarios
+        </div>
         <div v-for="(stats, missionType) in results.by_type" :key="missionType" class="mission-type-stats">
           <div class="mission-type-name">{{ missionType }}</div>
           <div class="mission-stats-grid">
@@ -167,12 +264,6 @@ function formatStatWithRange(stat: AggregatedStatistics | null | undefined): str
           </div>
         </div>
       </div>
-
-      <!-- TODO: Percentile Timelines Section -->
-      <!-- Display 3 timelines side-by-side or stacked (P10, P50, P90) -->
-      <!-- Reuse Timeline component from DES view, but adapt for multiple percentile timelines -->
-      <!-- Add clear labels (P10, P50, P90) and possibly different visual styling to distinguish them -->
-      <!-- Only show if results.percentile_timelines exists and has data -->
     </div>
   </div>
 </template>
@@ -234,6 +325,96 @@ function formatStatWithRange(stat: AggregatedStatistics | null | undefined): str
   font-size: 0.7rem;
   color: var(--text-muted-color);
   font-style: italic;
+  margin-bottom: 2px;
+}
+
+.stat-explanation {
+  font-size: 0.65rem;
+  color: var(--text-muted-color);
+  margin-top: 4px;
+  line-height: 1.2;
+}
+
+.stat-help {
+  display: inline-block;
+  margin-left: 4px;
+  cursor: help;
+  color: var(--accent-blue);
+  font-size: 0.85rem;
+  font-weight: normal;
+  vertical-align: middle;
+}
+
+.stat-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-section {
+  padding: 12px 16px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.info-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.info-header svg {
+  color: var(--accent-blue);
+  flex-shrink: 0;
+}
+
+.info-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-color);
+}
+
+.info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-color);
+  line-height: 1.5;
+}
+
+.info-text strong {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+.section-description {
+  font-size: 0.8rem;
+  color: var(--text-muted-color);
+  margin-bottom: 12px;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.section-help {
+  display: inline-block;
+  cursor: help;
+  color: var(--accent-blue);
+  font-size: 0.85rem;
+  font-weight: normal;
 }
 
 .iterations-info {

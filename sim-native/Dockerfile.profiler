@@ -1,5 +1,7 @@
 # Profiler container for generating flamegraphs on Linux (avoids macOS Xcode requirement)
 # Use latest stable Rust to support edition2024
+# To Run call:
+    # docker compose --profile profiler run --rm profiler-monte baseline.json 50000
 FROM rust:latest
 
 WORKDIR /workspace

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
-import ProcessTimes from '../des/ProcessTimes.vue'
+import ProcessTimes from '../des/config/settings/ProcessTimes.vue'
 import SimSettings from './SimSettings.vue'
 import ScenarioSelector from './ScenarioSelector.vue'
-import MissionTypes from '../des/MissionTypes.vue'
-import Demand from '../des/Demand.vue'
-import SettingsPreview from '../des/SettingsPreview.vue'
+import MissionTypes from '../des/config/operations/MissionTypes.vue'
+import Demand from '../des/config/operations/Demand.vue'
+import Overview from '../des/Overview.vue'
 import Results from './Results.vue'
 import { loadState, type State } from '../../state'
 import { API_SIM_MONTE_RUN } from '../../constants'
@@ -423,7 +423,7 @@ async function handleRunScenario() {
         mount_times: (() => {
           const result: Record<string, { value_hours: number }> = {}
           for (const key in processTimes.value.mountTimes) {
-            result[key] = { value_hours: processTimes.value.mountTimes[key] }
+            result[key] = { value_hours: processTimes.value.mountTimes[key as keyof typeof processTimes.value.mountTimes] }
           }
           return result
         })()
@@ -530,9 +530,9 @@ onMounted(() => {
       <div class="preview-section">
         <div class="section-card">
           <h3>Settings Preview</h3>
-          <SettingsPreview :unit-split="simSettings.unitSplit" :queueing="simSettings.queueing"
+          <Overview :unit-split="simSettings.unitSplit" :queueing="simSettings.queueing"
             :mission-types="missionTypes" :demand="demand" :process-times="processTimes"
-            :results="null" />
+            :horizon-hours="simSettings.horizonHours" :results="null" />
         </div>
 
         <div class="section-card results-card">

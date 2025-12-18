@@ -1,6 +1,6 @@
 {
   "name": "sorsim-frontend",
-  "version": "0.1.9",
+  "version": "0.3.16",
   "private": true,
   "type": "module",
   "scripts": {

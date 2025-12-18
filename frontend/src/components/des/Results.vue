@@ -1,4 +1,13 @@
 <script setup lang="ts">
+// TODO: review this file for cleanup and optimization
+import { ref, computed } from 'vue'
+import Summary from './results/Summary.vue'
+import Utilization from './results/Utilization.vue'
+import Analysis from './results/Analysis.vue'
+import Comparison from './results/Comparison.vue'
+
+const activeTab = ref<'summary' | 'utilization' | 'analysis' | 'comparison'>('summary')
+
 interface SimResults {
   missions: {
     requested: number
@@ -10,12 +19,102 @@ interface SimResults {
     aircraft: number
     pilot: number
     so: number
+    intel: number
     payload: number
   }
   utilization: Record<string, {
     aircraft: number
+    aircraft_efficiency: number
+    aircraft_stats: {
+      total: number
+      used: number
+      unused: number
+      utilization: number
+      utilizationPercent: number
+      efficiency: number
+      efficiencyPercent: number
+      busyHours: number
+      allocations: number
+      denials: number
+    }
     pilot: number
+    pilot_efficiency: number
+    pilot_stats: {
+      total: number
+      rawTotal: number
+      effectiveTotal: number
+      used: number
+      busy: number
+      idle: number
+      unavailable: number
+      utilization: number
+      busyPercent: number
+      idlePercent: number
+      unavailablePercent: number
+      trueForceUtilization: number
+      busyHours: number
+      allocations: number
+      denials: number
+    }
     so: number
+    so_efficiency: number
+    so_stats: {
+      total: number
+      rawTotal: number
+      effectiveTotal: number
+      used: number
+      busy: number
+      idle: number
+      unavailable: number
+      utilization: number
+      busyPercent: number
+      idlePercent: number
+      unavailablePercent: number
+      trueForceUtilization: number
+      busyHours: number
+      allocations: number
+      denials: number
+    }
+    intel: number
+    intel_efficiency: number
+    intel_stats: {
+      total: number
+      rawTotal: number
+      effectiveTotal: number
+      used: number
+      busy: number
+      idle: number
+      unavailable: number
+      utilization: number
+      busyPercent: number
+      idlePercent: number
+      unavailablePercent: number
+      trueForceUtilization: number
+      busyHours: number
+      allocations: number
+      denials: number
+    }
+    availability_factors?: {
+      pilot: number
+      so: number
+      intel: number
+    }
+    initial_crew?: {
+      pilot: number
+      so: number
+      intel: number
+    }
+    effective_crew?: {
+      pilot: number
+      so: number
+      intel: number
+    }
+    peak_concurrent?: {
+      aircraft: number
+      pilot: number
+      so: number
+      intel: number
+    }
   }>
   by_type?: Record<string, {
     requested: number
@@ -23,98 +122,89 @@ interface SimResults {
     completed: number
     rejected: number
   }>
+  availability_timeline?: {
+    pilot: any
+    so: any
+  }
+  initial_resources?: {
+    units: string[]
+    aircraftByUnit: Record<string, number>
+    staffingByUnit: Record<string, { pilot: number; so: number; intel: number }>
+    payloadByUnit: Record<string, Record<string, number>>
+    overrides_applied: boolean
+  }
 }
 
 interface Props {
   results: SimResults | null
+  scenarioName?: string
+  isRunning?: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
-function formatPercent(value: number): string {
-  return (value * 100).toFixed(0) + '%'
-}
+// Calculate if we have analysis data (availability factors present)
+const hasAnalysisData = computed(() => {
+  if (!props.results?.utilization) return false
+  const units = Object.values(props.results.utilization)
+  if (units.length === 0) return false
+  return units[0]?.availability_factors !== undefined
+})
 </script>
 
 <template>
   <div class="results">
-    <div v-if="!results" class="no-results">
-      <p>Run a scenario to see results</p>
+    <div class="results-header">
+      <h3>Results</h3>
+      <div v-if="results" class="results-meta">
+        <span class="results-scenario-name">{{ scenarioName }}</span>
+        <span class="results-timestamp">{{ new Date().toLocaleString() }}</span>
+      </div>
+    </div>
+    <div v-if="isRunning" class="running-indicator">
+      <div class="spinner"></div>
+      <p>Running simulation...</p>
+    </div>
+    <div v-else-if="!results" class="no-results">
+      <p>Run a simulation to see results</p>
     </div>
 
     <div v-else class="results-content">
-      <!-- Summary Stats -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-label">Requested</div>
-          <div class="stat-value">{{ results.missions.requested }}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Started</div>
-          <div class="stat-value">{{ results.missions.started }}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Completed</div>
-          <div class="stat-value">{{ results.missions.completed }}</div>
-        </div>
-        <div class="stat-card rejected">
-          <div class="stat-label">Rejected</div>
-          <div class="stat-value">{{ results.missions.rejected }}</div>
-        </div>
+      <!-- Tab Navigation -->
+      <div class="tab-navigation">
+        <button :class="['tab-btn', { active: activeTab === 'summary' }]" @click="activeTab = 'summary'">
+          Summary
+        </button>
+        <button :class="['tab-btn', { active: activeTab === 'utilization' }]" @click="activeTab = 'utilization'">
+          Utilization
+        </button>
+        <button v-if="hasAnalysisData" :class="['tab-btn', { active: activeTab === 'analysis' }]"
+          @click="activeTab = 'analysis'">
+          Analysis
+        </button>
+        <button :class="['tab-btn', { active: activeTab === 'comparison' }]" @click="activeTab = 'comparison'">
+          Comparison
+        </button>
       </div>
 
-      <!-- Rejections Breakdown -->
-      <div class="rejections-section">
-        <div class="section-title">Rejections</div>
-        <div class="rejections-grid">
-          <div class="rejection-item">
-            <span class="rejection-label">Aircraft</span>
-            <span class="rejection-value">{{ results.rejections.aircraft }}</span>
-          </div>
-          <div class="rejection-item">
-            <span class="rejection-label">Payload</span>
-            <span class="rejection-value">{{ results.rejections.payload }}</span>
-          </div>
-          <div class="rejection-item">
-            <span class="rejection-label">Sensor Operator</span>
-            <span class="rejection-value">{{ results.rejections.so }}</span>
-          </div>
-          <div class="rejection-item">
-            <span class="rejection-label">Pilot</span>
-            <span class="rejection-value">{{ results.rejections.pilot }}</span>
-          </div>
-        </div>
+      <!-- Summary Tab -->
+      <div v-show="activeTab === 'summary'" class="tab-panel">
+        <Summary :results="results" />
       </div>
 
-      <!-- Utilization -->
-      <div class="utilization-section">
-        <div class="section-title">Utilization</div>
-        <div v-for="(util, unit) in results.utilization" :key="unit" class="unit-utilization">
-          <div class="unit-name">{{ unit }}</div>
-          <div class="util-rows">
-            <div class="util-row">
-              <span class="util-label">Aircraft</span>
-              <div class="util-bar-container">
-                <div class="util-bar" :style="{ width: formatPercent(util.aircraft) }"></div>
-              </div>
-              <span class="util-value">{{ formatPercent(util.aircraft) }}</span>
-            </div>
-            <div class="util-row">
-              <span class="util-label">Pilot</span>
-              <div class="util-bar-container">
-                <div class="util-bar" :style="{ width: formatPercent(util.pilot) }"></div>
-              </div>
-              <span class="util-value">{{ formatPercent(util.pilot) }}</span>
-            </div>
-            <div class="util-row">
-              <span class="util-label">SO</span>
-              <div class="util-bar-container">
-                <div class="util-bar" :style="{ width: formatPercent(util.so) }"></div>
-              </div>
-              <span class="util-value">{{ formatPercent(util.so) }}</span>
-            </div>
-          </div>
-        </div>
+      <!-- Utilization Tab -->
+      <div v-show="activeTab === 'utilization'" class="tab-panel">
+        <Utilization :results="results" />
+      </div>
+
+      <!-- Analysis Tab -->
+      <div v-if="hasAnalysisData" v-show="activeTab === 'analysis'" class="tab-panel">
+        <Analysis :results="results" />
+      </div>
+
+      <!-- Comparison Tab -->
+      <div v-show="activeTab === 'comparison'" class="tab-panel">
+        <Comparison :current-results="results" :current-scenario-name="scenarioName || 'Unnamed Scenario'" />
       </div>
     </div>
   </div>
@@ -140,141 +230,109 @@ function formatPercent(value: number): string {
   gap: 16px;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+/* Tab Navigation */
+.tab-navigation {
+  display: flex;
+  gap: 4px;
+  margin-top: 0px;
+  margin-bottom: -16px;
+  border-bottom: 2px solid var(--border-color);
+  position: static !important;
+  z-index: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-muted-color);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.tab-btn:hover {
+  color: var(--text-color);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.tab-btn.active {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.tab-panel {
+  display: block;
+}
+
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.results-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.results-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
   gap: 12px;
 }
 
-.stat-card {
-  padding: 12px;
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  border-radius: 6px;
-  text-align: center;
-}
-
-.stat-card.rejected {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.3);
-}
-
-.stat-label {
-  font-size: 0.75rem;
-  color: var(--text-muted-color);
-  margin-bottom: 4px;
-  font-weight: 500;
-}
-
-.stat-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-color);
-}
-
-.rejections-section,
-.utilization-section {
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-}
-
-.section-title {
-  font-weight: 600;
+.results-scenario-name {
   font-size: 0.9rem;
-  margin-bottom: 12px;
-  color: var(--text-color);
-}
-
-.rejections-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-
-.rejection-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: var(--bg-color);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-}
-
-.rejection-label {
-  font-size: 0.85rem;
   color: var(--text-muted-color);
+  font-style: italic;
+  white-space: nowrap;
 }
 
-.rejection-value {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text-color);
+.results-timestamp {
+  font-size: 0.8rem;
+  color: var(--text-muted-color);
+  font-family: monospace;
+  white-space: nowrap;
 }
 
-.unit-utilization {
-  margin-bottom: 16px;
-}
-
-.unit-utilization:last-child {
-  margin-bottom: 0;
-}
-
-.unit-name {
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-color);
-  margin-bottom: 8px;
-}
-
-.util-rows {
+.running-indicator {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.util-row {
-  display: grid;
-  grid-template-columns: 80px 1fr 50px;
-  gap: 8px;
   align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 16px;
 }
 
-.util-label {
-  font-size: 0.8rem;
+.running-indicator p {
   color: var(--text-muted-color);
+  font-style: italic;
 }
 
-.util-bar-container {
-  height: 16px;
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 3px;
-  overflow: hidden;
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(59, 130, 246, 0.2);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-.util-bar {
-  height: 100%;
-  background: linear-gradient(to right, #4ade80, #22c55e);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.util-value {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-color);
-  text-align: right;
-}
-
-@media (max-width: 768px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .rejections-grid {
-    grid-template-columns: 1fr;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

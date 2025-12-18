@@ -112,11 +112,15 @@ module.exports = function registerSimRoutes(app, utils) {
         scenario = JSON.parse(content);
       }
       const state = body.state;
+      const simulateSettings = (body.simulateSettings && Array.isArray(body.simulateSettings)) 
+        ? body.simulateSettings 
+        : undefined;
       const results = await runMonteCarlo(scenario, { 
         state, 
         overrides, 
         iterations, 
-        keepIterations 
+        keepIterations,
+        simulateSettings
       });
       // Rust version
       // const results = await runMonteCarloNative(scenario, { state, overrides, iterations, keepIterations });

@@ -14,8 +14,8 @@ services:
       - ./frontend/dist:/sorsim/frontend/dist
       # Named volume: preserve container's node_modules (prevents host overwrite)
       - backend_node_modules:/sorsim/backend/node_modules
-    networks:
-      - alp
+    # networks:
+    #   - alp
 
   frontend:
     container_name: sorsim-frontend
@@ -25,16 +25,18 @@ services:
     env_file: .env
     ports:
       - "${VITE_FRONTEND_PORT:-3010}:${VITE_FRONTEND_PORT:-3010}"
+      - "${VITE_FRONTEND_PREVIEW_PORT:-3011}:${VITE_FRONTEND_PREVIEW_PORT:-3011}"
     volumes:
       # Bind mount: sync host code to container for live development
       - ./frontend:/sorsim/frontend
       # Named volume: preserve container's node_modules (prevents host overwrite)
       - frontend_node_modules:/sorsim/frontend/node_modules
-    networks:
-      - alp
+    # networks:
+    #   - alp
     depends_on:
       - backend
 
+      
   profiler:
     container_name: sorsim-profiler
     build:
@@ -70,10 +72,11 @@ services:
     profiles:
       - profiler
 
-networks:
-  alp:
-    name: alp_net
-    external: true
+
+# networks:
+#   alp:
+#     name: alp_net
+#     external: true
 
 volumes:
   backend_node_modules:

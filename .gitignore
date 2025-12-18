@@ -3,6 +3,9 @@
 frontend/dist/
 node_modules
 package-lock.json
+backend/tests/reports/backend_test_report/
+backend/tests/reports/backend_coverage_report/
+
 
 # Rust build artifacts
 sim-native/target/
@@ -13,6 +16,3 @@ sim-native/**/Cargo.lock
 
 # Native addon build outputs (can be rebuilt, but uncomment next line to track them)
 backend/wasm/pkg/**/*.node
-
-# Profiling outputs (flamegraphs)
-sim-native/profiles/*.svg

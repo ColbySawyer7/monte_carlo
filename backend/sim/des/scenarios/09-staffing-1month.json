@@ -1,0 +1,121 @@
+{
+  "name": "Staffing Analysis - 24/7 Flight Ops - 1 Month",
+  "category": "staffing",
+  "description": "Monthly staffing analysis for continuous 24/7 flight operations. Provides detailed view of personnel availability, utilization patterns, and duty cycle impacts over a 30-day period.",
+  "horizon_hours": 720,
+  "constraints": {
+    "queueing": "reject_if_unavailable"
+  },
+  "unit_policy": {
+    "assignment": "by_unit",
+    "mission_split": {
+      "VMU-1": 1.0,
+      "VMU-3": 0.0
+    }
+  },
+  "demand": [
+    {
+      "mission_type": "Continuous Flight Operations",
+      "type": "deterministic",
+      "every_hours": 9.5,
+      "start_at_hours": 8.0
+    }
+  ],
+  "mission_types": [
+    {
+      "name": "Continuous Flight Operations",
+      "priority": 1,
+      "required_aircrew": {
+        "pilot": 5,
+        "so": 5,
+        "intel": 1
+      },
+      "required_payload_types": [],
+      "flight_time": {
+        "type": "deterministic",
+        "value_hours": 9.5,
+        "transit_in_hours": 5.75,
+        "transit_out_hours": 5.75
+      },
+      "crew_rotation": {
+        "enabled": true,
+        "pilot_shifts": [
+          4,
+          4,
+          4,
+          4,
+          5
+        ],
+        "so_shifts": [
+          4,
+          4,
+          4,
+          4,
+          5
+        ]
+      }
+    }
+  ],
+  "process_times": {
+    "preflight": {
+      "value_hours": 0
+    },
+    "postflight": {
+      "value_hours": 0
+    },
+    "turnaround": {
+      "value_hours": 0
+    },
+    "mount_times": {}
+  },
+  "personnel_availability": {
+    "7318": {
+      "work_schedule": {
+        "days_on": 5,
+        "days_off": 2,
+        "daily_start_hour": 8,
+        "shift_split_enabled": true,
+        "shift_split_percent": 50,
+        "stagger_days_off": 2
+      },
+      "leave_days_annual": 30,
+      "range_days_annual": 3,
+      "safety_standdown_days_quarterly": 1,
+      "medical_days_monthly": 1,
+      "training_days_monthly": 1,
+      "daily_crew_rest_hours": 12
+    },
+    "7314": {
+      "work_schedule": {
+        "days_on": 5,
+        "days_off": 2,
+        "daily_start_hour": 8,
+        "shift_split_enabled": true,
+        "shift_split_percent": 50,
+        "stagger_days_off": 2
+      },
+      "leave_days_annual": 30,
+      "range_days_annual": 14,
+      "safety_standdown_days_quarterly": 1,
+      "medical_days_monthly": 1,
+      "training_days_monthly": 1,
+      "daily_crew_rest_hours": 12
+    },
+    "0231": {
+      "work_schedule": {
+        "days_on": 5,
+        "days_off": 2,
+        "daily_start_hour": 8,
+        "shift_split_enabled": true,
+        "shift_split_percent": 50,
+        "stagger_days_off": 2
+      },
+      "leave_days_annual": 30,
+      "range_days_annual": 14,
+      "safety_standdown_days_quarterly": 1,
+      "medical_days_monthly": 1,
+      "training_days_monthly": 1,
+      "daily_crew_rest_hours": 12
+    }
+  }
+}

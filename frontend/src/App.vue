@@ -1,36 +1,47 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 
-import Aircraft from './views/Aircraft.vue'
-import Payload from './views/Payload.vue'
-import Staffing from './views/Staffing.vue'
-import Unit from './views/Unit.vue'
+import Aircraft from './views/instance/Aircraft.vue'
+import Payload from './views/instance/Payload.vue'
+import Staffing from './views/instance/Staffing.vue'
+import Unit from './views/instance/Unit.vue'
 
-import DES from './views/DES.vue'
 import Monte from './views/Monte.vue'
+import DES from './views/sim/DES.vue'
+import DESconfigInspector from './views/sim/DESconfigInspector.vue'
 
-import Training from './views/Training.vue'
-import Readiness from './views/Readiness.vue'
-import Conditions from './views/Conditions.vue'
+import Training from './views/reference/Training.vue'
+import Readiness from './views/reference/Readiness.vue'
+import Conditions from './views/reference/Conditions.vue'
 
 import { MODE, VERSION } from './constants'
 
 const activeTab = ref('aircraft')
-const isDarkMode = ref(true)
+const isDarkMode = ref(false)
 
-// Initialize theme from localStorage or default to dark
+// Initialize theme and active tab from localStorage
 onMounted(() => {
   const savedTheme = localStorage.getItem('theme')
   if (savedTheme) {
     isDarkMode.value = savedTheme === 'dark'
   }
   applyTheme()
+
+  const savedTab = localStorage.getItem('activeTab')
+  if (savedTab) {
+    activeTab.value = savedTab
+  }
 })
 
 function toggleTheme() {
   isDarkMode.value = !isDarkMode.value
   applyTheme()
   localStorage.setItem('theme', isDarkMode.value ? 'dark' : 'light')
+}
+
+function setActiveTab(tab: string) {
+  activeTab.value = tab
+  localStorage.setItem('activeTab', tab)
 }
 
 function applyTheme() {
@@ -59,16 +70,16 @@ function applyTheme() {
         <div class="tab-section tab-section-left">
           <span class="tab-section-label">Instance Data</span>
           <div class="tab-group">
-            <button class="tab-btn" :class="{ active: activeTab === 'aircraft' }" @click="activeTab = 'aircraft'">
+            <button class="tab-btn" :class="{ active: activeTab === 'aircraft' }" @click="setActiveTab('aircraft')">
               Aircraft
             </button>
-            <button class="tab-btn" :class="{ active: activeTab === 'payload' }" @click="activeTab = 'payload'">
+            <button class="tab-btn" :class="{ active: activeTab === 'payload' }" @click="setActiveTab('payload')">
               Payload
             </button>
-            <button class="tab-btn" :class="{ active: activeTab === 'staffing' }" @click="activeTab = 'staffing'">
+            <button class="tab-btn" :class="{ active: activeTab === 'staffing' }" @click="setActiveTab('staffing')">
               Staffing
             </button>
-            <button class="tab-btn" :class="{ active: activeTab === 'unit' }" @click="activeTab = 'unit'">
+            <button class="tab-btn" :class="{ active: activeTab === 'unit' }" @click="setActiveTab('unit')">
               Unit
             </button>
           </div>
@@ -78,17 +89,14 @@ function applyTheme() {
         <div class="tab-section tab-section-center">
           <span class="tab-section-label">Simulation Models</span>
           <div class="tab-group">
-            <button class="tab-btn" :class="{ active: activeTab === 'monte' }" @click="activeTab = 'monte'">
+            <button class="tab-btn" :class="{ active: activeTab === 'monte' }" @click="setActiveTab('monte')">
               Monte
             </button>
-            <button class="tab-btn" :class="{ active: activeTab === 'des' }" @click="activeTab = 'des'">
+            <button class="tab-btn" :class="{ active: activeTab === 'des' }" @click="setActiveTab('des')">
               DES
             </button>
-            <button class="tab-btn" :class="{ active: activeTab === 'abs' }" @click="activeTab = 'abs'">
-              ABS
-            </button>
-            <button class="tab-btn" :class="{ active: activeTab === 'sd' }" @click="activeTab = 'sd'">
-              SD
+            <button class="tab-btn" :class="{ active: activeTab === 'config' }" @click="setActiveTab('config')">
+              DES Config Inspector
             </button>
           </div>
         </div>
@@ -97,13 +105,13 @@ function applyTheme() {
         <div class="tab-section tab-section-right">
           <span class="tab-section-label">Reference Data</span>
           <div class="tab-group">
-            <button class="tab-btn" :class="{ active: activeTab === 'training' }" @click="activeTab = 'training'">
+            <button class="tab-btn" :class="{ active: activeTab === 'training' }" @click="setActiveTab('training')">
               Training
             </button>
-            <button class="tab-btn" :class="{ active: activeTab === 'readiness' }" @click="activeTab = 'readiness'">
+            <button class="tab-btn" :class="{ active: activeTab === 'readiness' }" @click="setActiveTab('readiness')">
               Readiness
             </button>
-            <button class="tab-btn" :class="{ active: activeTab === 'conditions' }" @click="activeTab = 'conditions'">
+            <button class="tab-btn" :class="{ active: activeTab === 'conditions' }" @click="setActiveTab('conditions')">
               Conditions
             </button>
           </div>
@@ -118,12 +126,7 @@ function applyTheme() {
         <Unit v-else-if="activeTab === 'unit'" />
         <Monte v-else-if="activeTab === 'monte'" />
         <DES v-else-if="activeTab === 'des'" />
-        <div v-else-if="activeTab === 'abs'" class="tab-panel">
-          ABS content
-        </div>
-        <div v-else-if="activeTab === 'sd'" class="tab-panel">
-          SD content
-        </div>
+        <DESconfigInspector v-else-if="activeTab === 'config'" />
         <Training v-else-if="activeTab === 'training'" />
         <Readiness v-else-if="activeTab === 'readiness'" />
         <Conditions v-else-if="activeTab === 'conditions'" />

@@ -7,12 +7,17 @@ The backend is built with **Node.js/Express** and serves both the API and produc
 	- Copy `.env.template` to `.env` (or edit `.env` directly)
 	- Set the MySQL credentials and ports in `.env`:
 	  ```bash
+		# MySQL database configuration
 		DB_HOST=your_host
 		DB_USER=your_username
 		DB_PASSWORD=your_password
 		DB_NAME=your_database
 		DB_PORT=3306
+		# Ports configuration
 		BACKEND_API_PORT=3009
+		VITE_FRONTEND_PORT=3010
+		VITE_FRONTEND_PREVIEW_PORT=3011
+		VITE_BACKEND_API_PORT="${BACKEND_API_PORT}"
 		```
 
 2. **Install dependencies:**

@@ -18,12 +18,15 @@ if command -v napi &> /dev/null; then
   NAPI_CMD="napi"
 elif [ -f "$SCRIPT_DIR/backend/node_modules/.bin/napi" ]; then
   NAPI_CMD="$SCRIPT_DIR/backend/node_modules/.bin/napi"
+elif command -v npm &> /dev/null && [ -f "$SCRIPT_DIR/backend/node_modules/.bin/napi" ]; then
+  # Use npm exec if available
+  NAPI_CMD="cd $SCRIPT_DIR/backend && npm exec napi"
 elif command -v pnpm &> /dev/null && [ -f "$SCRIPT_DIR/backend/node_modules/.bin/napi" ]; then
-  # Use pnpm exec if available
+  # Fall back to pnpm exec if available (for backwards compatibility)
   NAPI_CMD="cd $SCRIPT_DIR/backend && pnpm exec napi"
 else
   echo "Error: napi CLI not found. Please install @napi-rs/cli:"
-  echo "  cd backend && pnpm install"
+  echo "  cd backend && npm install"
   exit 1
 fi
 
