@@ -1,6 +1,0 @@
-# This directory will contain compiled WASM modules
-# Structure:
-#   pkg/
-#     des/     - DES engine WASM module
-#     monte/   - Monte Carlo engine WASM module
-

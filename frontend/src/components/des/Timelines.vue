@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // TODO: review this file for cleanup and optimization
 import { ref, computed, onMounted, watch } from 'vue'
+import { load, save } from '../../composables/useLocalStorage'
 import FlightTimeline from './timelines/FlightTimeline.vue'
 import PersonnelTimeline from './timelines/PersonnelTimeline.vue'
 import PersonnelAvailability from './timelines/PersonnelAvailability.vue'
@@ -146,59 +147,51 @@ const expandedUnits = ref<Set<string>>(new Set())
 
 // Load saved state from localStorage on mount
 onMounted(() => {
-  const savedTab = localStorage.getItem('desTimelineActiveTab')
+  const savedTab = load<string>('desTimelineActiveTab')
   if (savedTab && (savedTab === 'flight' || savedTab === 'personnel' || savedTab === 'availability')) {
     activeTab.value = savedTab as 'flight' | 'personnel' | 'availability'
   }
 
-  const savedExpandedUnits = localStorage.getItem('desTimelineExpandedUnits')
-  if (savedExpandedUnits) {
-    try {
-      const units = JSON.parse(savedExpandedUnits)
-      expandedUnits.value = new Set(units)
-    } catch (e) {
-      // Invalid JSON, use defaults
-    }
+  const savedExpandedUnits = load<string[]>('desTimelineExpandedUnits')
+  if (savedExpandedUnits && Array.isArray(savedExpandedUnits)) {
+    expandedUnits.value = new Set(savedExpandedUnits)
   }
 
-  const savedMos = localStorage.getItem('desTimelineSelectedMos')
+  const savedMos = load<string>('desTimelineSelectedMos')
   if (savedMos && (savedMos === '7318' || savedMos === '7314' || savedMos === '0231')) {
     selectedAvailabilityMos.value = savedMos as '7318' | '7314' | '0231'
   }
 
-  const savedCrewType = localStorage.getItem('desTimelineSelectedCrewType')
+  const savedCrewType = load<string>('desTimelineSelectedCrewType')
   if (savedCrewType && (savedCrewType === 'pilot' || savedCrewType === 'so' || savedCrewType === 'intel')) {
     selectedCrewType.value = savedCrewType as 'pilot' | 'so' | 'intel'
   }
 
-  const savedMaxHeight = localStorage.getItem('desTimelineMaxHeight')
-  if (savedMaxHeight) {
-    const height = parseInt(savedMaxHeight)
-    if (!isNaN(height) && maxHeightOptions.some(opt => opt.height === height)) {
-      maxExpandedHeight.value = height
-    }
+  const savedMaxHeight = load<number>('desTimelineMaxHeight')
+  if (savedMaxHeight && !isNaN(savedMaxHeight) && maxHeightOptions.some(opt => opt.height === savedMaxHeight)) {
+    maxExpandedHeight.value = savedMaxHeight
   }
 })
 
 // Save state to localStorage when it changes
 watch(activeTab, (newTab) => {
-  localStorage.setItem('desTimelineActiveTab', newTab)
+  save('desTimelineActiveTab', newTab)
 })
 
 watch(expandedUnits, (newUnits) => {
-  localStorage.setItem('desTimelineExpandedUnits', JSON.stringify(Array.from(newUnits)))
+  save('desTimelineExpandedUnits', Array.from(newUnits))
 }, { deep: true })
 
 watch(selectedAvailabilityMos, (newMos) => {
-  localStorage.setItem('desTimelineSelectedMos', newMos)
+  save('desTimelineSelectedMos', newMos)
 })
 
 watch(selectedCrewType, (newType) => {
-  localStorage.setItem('desTimelineSelectedCrewType', newType)
+  save('desTimelineSelectedCrewType', newType)
 })
 
 watch(maxExpandedHeight, (newHeight) => {
-  localStorage.setItem('desTimelineMaxHeight', newHeight.toString())
+  save('desTimelineMaxHeight', newHeight)
 })
 
 // Shared toggle function for units
@@ -562,7 +555,8 @@ const getUnitsFromTimeline = () => {
         :total-pages="totalPages" :current-start-hour="currentStartHour" :current-end-hour="currentEndHour"
         :page-window-hours="pageWindowHours" :window-options="windowOptions" :max-expanded-height="maxExpandedHeight"
         :height-options="maxHeightOptions" :format-time-label="formatTimeLabel"
-        :actual-horizon-hours="props.horizonHours" :legend-items="flightLegendItems" @toggle-unit="toggleUnit"
+        :actual-horizon-hours="props.horizonHours" :legend-items="flightLegendItems"
+        :unit-split="unitSplit" :initial-resources="initialResources" @toggle-unit="toggleUnit"
         @prev-page="prevPage" @next-page="nextPage" @update-window-size="pageWindowHours = $event"
         @update-max-height="maxExpandedHeight = $event" />
     </div>

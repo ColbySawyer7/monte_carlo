@@ -1,16 +1,15 @@
 <script setup lang="ts">
 // TODO: review this file for cleanup and optimization
 import { ref, computed, watch } from 'vue'
-
-const STORAGE_KEY = 'desResultsAnalysisActiveTab'
+import { load, save } from '../../../composables/useLocalStorage'
 
 const activeTab = ref<'overview' | 'efficiency' | 'mission-performance' | 'crew-performance'>(
-  (localStorage.getItem(STORAGE_KEY) as any) || 'overview'
+  load<'overview' | 'efficiency' | 'mission-performance' | 'crew-performance'>('desResultsAnalysisActiveTab') || 'overview'
 )
 
 // Save active tab to localStorage whenever it changes
 watch(activeTab, (newTab) => {
-  localStorage.setItem(STORAGE_KEY, newTab)
+  save('desResultsAnalysisActiveTab', newTab)
 })
 
 interface SimResults {

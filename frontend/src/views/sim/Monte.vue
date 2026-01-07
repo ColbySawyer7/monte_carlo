@@ -1,17 +1,21 @@
 <script setup lang="ts">
 // TODO: review this file for cleanup and optimization
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
-import Scenario from '../components/monte/Scenario.vue'
-import Config from '../components/des/Config.vue'
-import Overview from '../components/des/Overview.vue'
-import Results from '../components/monte/Results.vue'
-import MonteTimelines from '../components/monte/Timelines.vue'
-import { loadState, type State } from '../state'
-import { API_SIM_MONTE_RUN } from '../constants'
-import { MonteCarloConfigDefaults } from './sim/MonteCarloConfigDefaults'
+// monte specific components
+import MonteTimelines from '../../components/monte/MonteTimelines.vue'
+import MonteSettings from '../../components/monte/MonteSettings.vue'
+import MonteResults from '../../components/monte/MonteResults.vue'
 
-// Use shared Monte Carlo config defaults for initial values
+// des specific components
+import Scenario from '../../components/des/Scenario.vue'
+import { DESconfigDefaults } from './DESconfigDefaults'
+import { useLocalStorage } from '../../composables/useLocalStorage'
+
+import { loadState, type State } from '../../state'
+import { API_SIM_RUN_MONTE } from '../../constants'
+
+// Use shared DES config defaults for scenario config only (not results)
 const {
   processTimes,
   simSettings,
@@ -22,80 +26,17 @@ const {
   currentConfig,
   resetToDefaults,
   hasLoadedScenario,
-  saveToLocalStorage,
-  loadFromLocalStorage,
-  simulationResults,
-  resultsScenarioName,
-  resultsTimestamp,
   currentScenarioName
-} = MonteCarloConfigDefaults()
+} = DESconfigDefaults()
+
+// Monte-specific refs for simulation results (separate from DES)
+const simulationResults = ref<any>(null)
+const resultsScenarioName = ref<string>('')
+const resultsTimestamp = ref<string>('')
 const isRunning = ref(false)
-const hasUnsavedChanges = ref(false)
 const simulateSettings = ref<any[]>([])
-
-// Store original override values from state API
-const originalOverrides = ref({
-  vmu1: {
-    aircraft: 0,
-    pilot: 0,
-    so: 0,
-    intel: 0,
-    skyTower: 0,
-    ewPod: 0,
-    smartSensor: 0,
-    extendedRange: 0
-  },
-  vmu3: {
-    aircraft: 0,
-    pilot: 0,
-    so: 0,
-    intel: 0,
-    skyTower: 0,
-    ewPod: 0,
-    smartSensor: 0,
-    extendedRange: 0
-  }
-})
-
-// Store staffing counts per unit from state
-const baseStaffing = ref({
-  vmu1: { pilot: 0, so: 0, intel: 0 },
-  vmu3: { pilot: 0, so: 0, intel: 0 }
-})
-
-// Computed staffing that respects override settings
-const staffing = computed(() => {
-  if (simSettings.value.enableOverrides) {
-    return {
-      vmu1: {
-        pilot: simSettings.value.overrides.vmu1.pilot,
-        so: simSettings.value.overrides.vmu1.so,
-        intel: simSettings.value.overrides.vmu1.intel
-      },
-      vmu3: {
-        pilot: simSettings.value.overrides.vmu3.pilot,
-        so: simSettings.value.overrides.vmu3.so,
-        intel: simSettings.value.overrides.vmu3.intel
-      }
-    }
-  }
-  return baseStaffing.value
-})
-
-// Computed list of mission type names for the demand component
-const availableMissionTypes = computed(() => {
-  return missionTypes.value.map(mt => mt.name).filter(Boolean)
-})
-
-// Handler for when mission types change (name changes or removals)
-function handleMissionTypesChanged() {
-  const validMissionTypes = new Set(availableMissionTypes.value)
-
-  // Filter out demand entries that reference mission types that no longer exist
-  demand.value = demand.value.filter(d =>
-    validMissionTypes.has(d.missionType)
-  )
-}
+const showSettingsWarning = ref(false)
+const settingsSectionRef = ref<HTMLElement | null>(null)
 
 // Transform timeline data from backend format to component format (same as DES)
 // This transforms the raw timeline (with segments) into flattened events for the Flight Timeline
@@ -148,29 +89,65 @@ const transformedPercentileTimelines = computed(() => {
   if (!simulationResults.value?.percentile_timelines) return null
 
   const transformed: Record<string, any> = {}
-  
+
   for (const [key, percentileData] of Object.entries(simulationResults.value.percentile_timelines)) {
     transformed[key] = {
-      ...percentileData,
-      timeline: transformTimeline(percentileData.timeline),
-      rawTimeline: percentileData.rawTimeline || percentileData.timeline // Keep raw for personnel timeline
+      ...(percentileData as any),
+      timeline: transformTimeline((percentileData as any).timeline),
+      rawTimeline: (percentileData as any).rawTimeline || (percentileData as any).timeline // Keep raw for personnel timeline
     }
   }
-  
+
   return transformed
 })
 
-// Watch for enableOverrides changes to restore original values when disabled
-watch(
-  () => simSettings.value.enableOverrides,
-  (newValue) => {
-    if (!newValue) {
-      // Restore original values when overrides are disabled
-      simSettings.value.overrides.vmu1 = { ...originalOverrides.value.vmu1 }
-      simSettings.value.overrides.vmu3 = { ...originalOverrides.value.vmu3 }
+// Use centralized localStorage composable
+const storage = useLocalStorage()
+
+// Save Monte config and results
+function saveMonteState() {
+  storage.saveMonteState(
+    {
+      processTimes: processTimes.value,
+      simSettings: simSettings.value,
+      missionTypes: missionTypes.value,
+      demand: demand.value,
+      dutyRequirements: dutyRequirements.value,
+      personnelAvailability: personnelAvailability.value,
+      hasLoadedScenario: hasLoadedScenario.value,
+      currentScenarioName: currentScenarioName.value
+    },
+    {
+      simulationResults: simulationResults.value,
+      resultsScenarioName: resultsScenarioName.value,
+      resultsTimestamp: resultsTimestamp.value
     }
+  )
+}
+
+// Load Monte config and results
+function loadMonteState() {
+  const state = storage.loadMonteState()
+
+  if (state.config) {
+    processTimes.value = state.config.processTimes
+    simSettings.value = state.config.simSettings
+    missionTypes.value = state.config.missionTypes
+    demand.value = state.config.demand
+    dutyRequirements.value = state.config.dutyRequirements
+    personnelAvailability.value = state.config.personnelAvailability
+    hasLoadedScenario.value = state.config.hasLoadedScenario
+    currentScenarioName.value = state.config.currentScenarioName
   }
-)
+
+  if (state.results) {
+    simulationResults.value = state.results.simulationResults
+    resultsScenarioName.value = state.results.resultsScenarioName
+    resultsTimestamp.value = state.results.resultsTimestamp
+  }
+
+  return !!state.config
+}
 
 // Load override defaults from state API
 async function loadOverrideDefaults() {
@@ -236,18 +213,6 @@ async function loadOverrideDefaults() {
       ...payloadCounts('VMU-3')
     }
 
-    // Calculate staffing per unit
-    const vmu1Crew = crewCounts('VMU-1')
-    const vmu3Crew = crewCounts('VMU-3')
-    baseStaffing.value = {
-      vmu1: { pilot: vmu1Crew.pilot, so: vmu1Crew.so, intel: vmu1Crew.intel },
-      vmu3: { pilot: vmu3Crew.pilot, so: vmu3Crew.so, intel: vmu3Crew.intel }
-    }
-
-    // Store original values
-    originalOverrides.value.vmu1 = { ...vmu1Data }
-    originalOverrides.value.vmu3 = { ...vmu3Data }
-
     // Update override defaults
     simSettings.value.overrides.vmu1 = vmu1Data
     simSettings.value.overrides.vmu3 = vmu3Data
@@ -257,7 +222,7 @@ async function loadOverrideDefaults() {
 }
 
 // Scenario Handlers
-function handleScenarioLoaded(content: any, scenarioId?: string) {
+function handleScenarioLoaded(content: any) {
   currentScenarioName.value = content.name || 'Loaded Scenario'
   hasLoadedScenario.value = true  // Mark that a scenario has been loaded
 
@@ -277,6 +242,10 @@ function handleScenarioLoaded(content: any, scenarioId?: string) {
     // Restore iterations if present (Monte Carlo specific)
     if (content.simSettings.iterations !== undefined) {
       simSettings.value.iterations = content.simSettings.iterations
+    }
+    // Restore algorithm if present (Monte Carlo specific)
+    if (content.simSettings.algorithm !== undefined) {
+      simSettings.value.algorithm = content.simSettings.algorithm
     }
   } else {
     // Disable resource overrides when loading prebuilt scenarios from API
@@ -598,7 +567,7 @@ function handleScenarioLoaded(content: any, scenarioId?: string) {
   }
 
   // Save to localStorage after loading scenario
-  saveToLocalStorage(scenarioId)
+  saveMonteState()
 }
 
 function handleNewScenario() {
@@ -615,14 +584,30 @@ function handleNewScenario() {
   // Disable resource overrides
   simSettings.value.enableOverrides = false
 
-  // Save to localStorage after creating new scenario (no scenario ID)
-  saveToLocalStorage(undefined)
+  // Save to localStorage after creating new scenario
+  saveMonteState()
 }
 
 async function handleRunScenario() {
   // Save current scroll position
   const scrollX = window.scrollX
   const scrollY = window.scrollY
+
+  // Check if at least one valid variable is selected
+  const validSettings = simulateSettings.value.filter(
+    s => s.fieldPath && s.constraints && s.constraints.type === 'number'
+  )
+
+  if (validSettings.length === 0) {
+    alert('Please add at least one variable to simulate before running the Monte Carlo simulation.')
+    showSettingsWarning.value = true
+    // Scroll to settings section
+    await new Promise(resolve => setTimeout(resolve, 100))
+    if (settingsSectionRef.value) {
+      settingsSectionRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    return
+  }
 
   isRunning.value = true
   simulationResults.value = null
@@ -757,16 +742,17 @@ async function handleRunScenario() {
         step: s.constraints.step ?? 1
       }))
 
-    // POST to /api/sim/monte/run
-    const response = await fetch(API_SIM_MONTE_RUN, {
+    // POST to /api/sim/run_monte
+    const response = await fetch(API_SIM_RUN_MONTE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        scenario, 
-        state, 
+      body: JSON.stringify({
+        scenario,
+        state,
         overrides,
         iterations: simSettings.value.iterations,
-        keepIterations: false,
+        algorithm: simSettings.value.algorithm || 'PERT', // Default to PERT if not set
+        keepIterations: true, // Enable to get raw data for charts (histogram, CDF, convergence)
         simulateSettings: validSimulateSettings.length > 0 ? validSimulateSettings : undefined
       })
     })
@@ -777,12 +763,24 @@ async function handleRunScenario() {
     }
 
     const data = await response.json()
-    simulationResults.value = data.results
+    // Ensure iterations is in results (backend includes it, but add as fallback)
+    // Extract only the values we need from iterations to minimize memory usage
+    const iterationsData = data.results.iterations 
+      ? data.results.iterations.map((iter: any) => ({
+          missions: iter.missions ? { completed: iter.missions.completed } : undefined
+        }))
+      : undefined
+    
+    simulationResults.value = {
+      ...data.results,
+      iterations: data.results.iterations?.length || simSettings.value.iterations,
+      iterations_data: iterationsData
+    }
     resultsScenarioName.value = currentScenarioName.value
     resultsTimestamp.value = new Date().toLocaleString()
 
-    // Save results to localStorage (pass current scenario name to preserve it)
-    saveToLocalStorage(currentScenarioName.value)
+    // Save config and results to localStorage
+    saveMonteState()
 
     // Restore scroll position after next render
     await new Promise(resolve => setTimeout(resolve, 0))
@@ -802,14 +800,13 @@ async function handleRunScenario() {
 onMounted(() => {
   loadOverrideDefaults()
 
-  // Try to load from localStorage first
-  const result = loadFromLocalStorage()
+  // Try to load Monte state from localStorage
+  const hasState = loadMonteState()
 
   // Only initialize with defaults if nothing was saved in localStorage
-  if (!result.success) {
+  if (!hasState) {
     handleNewScenario()
   }
-  // Note: Scenario component will restore selection via its own localStorage check
 })
 </script>
 
@@ -821,82 +818,57 @@ onMounted(() => {
         <div>
           <h2>MONTE CARLO SIMULATION</h2>
           <p class="section-desc">
-            Purpose: run multiple DES iterations with random sampling to understand variability and uncertainty in outcomes.<br>
-            Benefits: provides statistical distributions (mean, percentiles, confidence intervals) for key metrics; quantifies risk and uncertainty.<br>
-            Best use: when you need to understand the range of possible outcomes, assess confidence levels, and make risk-informed decisions based on aggregated statistics.
+            Purpose: run multiple DES iterations with random sampling to understand variability and uncertainty in
+            outcomes.<br>
+            Benefits: provides statistical distributions (mean, percentiles, confidence intervals) for key metrics;
+            quantifies risk and uncertainty.<br>
+            Best use: when you need to understand the range of possible outcomes, assess confidence levels, and make
+            risk-informed decisions based on aggregated statistics.
           </p>
         </div>
       </div>
     </div>
 
-    <!-- Percentile Timelines Section (at top of page, like DES) -->
-    <div v-if="transformedPercentileTimelines && Object.keys(transformedPercentileTimelines).length > 0" class="timelines-section">
-      <MonteTimelines
-        :percentile-timelines="transformedPercentileTimelines"
-        :horizon-hours="simulationResults.horizon_hours"
-        :unit-split="simulationResults.unitSplit"
-        :initial-resources="simulationResults.initial_resources"
-        :utilization="simulationResults.utilization"
-        :personnel-availability="simulationResults.personnel_availability"
-      />
+    <!-- Percentile Timelines Section (Top Row) -->
+    <div v-if="transformedPercentileTimelines && Object.keys(transformedPercentileTimelines).length > 0"
+      class="timelines-section">
+      <MonteTimelines :percentile-timelines="transformedPercentileTimelines"
+        :horizon-hours="simulationResults.horizon_hours" :unit-split="simulationResults.unitSplit"
+        :initial-resources="simulationResults.initial_resources" :utilization="simulationResults.utilization"
+        :personnel-availability="simulationResults.personnel_availability" />
     </div>
 
-    <!-- Main Layout: Left (Scenario) + Right (Overview and Results) -->
-    <div class="monte-layout">
-      <!-- Left Section: Scenario Editor -->
-      <div class="scenario-section">
-        <!-- Scenario Section -->
-        <div class="section-card">
-          <Scenario :current-config="currentConfig" :has-unsaved-changes="hasUnsavedChanges"
-            @scenario-loaded="handleScenarioLoaded" @new-scenario="handleNewScenario" @run-scenario="handleRunScenario"
-            @update:has-unsaved-changes="hasUnsavedChanges = $event"
-            @update:simulate-settings="simulateSettings = $event" />
-        </div>
+    <!-- Results Section (Second Row) -->
+    <div v-if="simulationResults && !isRunning" class="section-card results-card">
+      <MonteResults :results="simulationResults" />
+    </div>
 
-        <!-- Scenario Configuration Section -->
-        <div class="section-card config-card">
-          <Config :process-times="processTimes" @update:process-times="processTimes = $event"
-            :sim-settings="simSettings" @update:sim-settings="(val) => simSettings = {
-              ...val,
-              overrides: {
-                vmu1: { ...val.overrides.vmu1, intel: val.overrides.vmu1.intel ?? 0 },
-                vmu3: { ...val.overrides.vmu3, intel: val.overrides.vmu3.intel ?? 0 }
-              }
-            }" :mission-types="missionTypes" @update:mission-types="(val) => missionTypes = val.map(mt => ({
-              ...mt,
-              intelReq: mt.intelReq ?? 0,
-              crew_rotation: mt.crew_rotation ? {
-                ...mt.crew_rotation,
-                intel_shifts: mt.crew_rotation.intel_shifts ?? []
-              } : undefined
-            }))" @mission-types-changed="handleMissionTypesChanged" :demand="demand" @update:demand="demand = $event"
-            :duty-requirements="dutyRequirements" @update:duty-requirements="(val) => dutyRequirements = {
-              odo: { ...val.odo, requires_intel: val.odo.requires_intel ?? 0, duty_recovery_hours: val.odo.duty_recovery_hours ?? 0, respect_work_schedule: val.odo.respect_work_schedule ?? false },
-              sdo: { ...val.sdo, requires_intel: val.sdo.requires_intel ?? 0, duty_recovery_hours: val.sdo.duty_recovery_hours ?? 24, respect_work_schedule: val.sdo.respect_work_schedule ?? false },
-              sdnco: { ...val.sdnco, requires_intel: val.sdnco.requires_intel ?? 0, duty_recovery_hours: val.sdnco.duty_recovery_hours ?? 24, respect_work_schedule: val.sdnco.respect_work_schedule ?? false },
-              lookahead: val.lookahead ?? { enabled: true, hours: 72 }
-            }" :availability-factors="personnelAvailability"
-            @update:availability-factors="personnelAvailability = $event"
-            :available-mission-types="availableMissionTypes" :staffing="staffing" />
-        </div>
+    <!-- Running Indicator (shown when running) -->
+    <div v-if="isRunning" class="section-card results-card">
+      <div class="running-indicator">
+        <div class="spinner"></div>
+        <p>Running Monte Carlo simulation ({{ simSettings.iterations }} iterations)...</p>
       </div>
+    </div>
 
-      <!-- Right Section: Config Overview and Results -->
-      <div class="overview-section">
-        <div class="section-card">
-          <Overview :unit-split="simSettings.unitSplit" :queueing="simSettings.queueing" :mission-types="missionTypes"
-            :demand="demand" :process-times="processTimes" :horizon-hours="simSettings.horizonHours"
-            :results="resultsScenarioName === currentScenarioName ? simulationResults : null" />
-        </div>
+    <!-- Scenario Section -->
+    <div class="section-card scenario-section">
+      <Scenario mode="monte" :filter-category="['custom', 'staffing']" :current-config="currentConfig"
+        :disable-change-tracking="true" @scenario-loaded="handleScenarioLoaded" @new-scenario="handleNewScenario"
+        @run-scenario="handleRunScenario" />
+    </div>
 
-        <div class="section-card results-card">
-          <div v-if="isRunning" class="running-indicator">
-            <div class="spinner"></div>
-            <p>Running Monte Carlo simulation ({{ simSettings.iterations }} iterations)...</p>
-          </div>
-          <Results v-else :results="simulationResults" />
-        </div>
+    <!-- Monte Carlo Settings Section -->
+    <div class="section-card" ref="settingsSectionRef">
+      <div class="settings-header">
+        <h3>Monte Carlo Settings</h3>
       </div>
+      <MonteSettings :loading="isRunning" :current-config="currentConfig" :simulate-settings="simulateSettings"
+        :iterations="simSettings.iterations" :algorithm="simSettings.algorithm" :show-warning="showSettingsWarning"
+        @update:simulate-settings="simulateSettings = $event"
+        @update:iterations="simSettings.iterations = $event"
+        @update:algorithm="simSettings.algorithm = $event"
+        @warning-cleared="showSettingsWarning = false" />
     </div>
   </div>
 </template>
@@ -932,57 +904,33 @@ onMounted(() => {
   line-height: 1.5;
 }
 
-.monte-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  grid-auto-rows: auto;
-}
-
-.scenario-section,
-.overview-section {
-  display: contents;
-}
-
 .section-card {
   background: var(--panel-color);
   border: 1px solid var(--border-color);
-  border-radius: 0;
+  border-radius: 8px;
   padding: 16px;
-  max-width: 100%;
-}
-
-.section-card:first-child {
-  grid-row: 1;
-}
-
-/* Top left card - first in scenario-section */
-.scenario-section .section-card:nth-of-type(1) {
-  border-top-left-radius: 8px;
-}
-
-/* Top right card - first in overview-section */
-.overview-section .section-card:nth-of-type(1) {
-  border-top-right-radius: 8px;
-}
-
-/* Bottom left card - second in scenario-section */
-.scenario-section .section-card:nth-of-type(2) {
-  border-bottom-left-radius: 8px;
-}
-
-/* Bottom right card - second in overview-section */
-.overview-section .section-card:nth-of-type(2) {
-  border-bottom-right-radius: 8px;
-}
-
-.config-card {
-  margin-top: 0;
-  overflow-x: hidden;
+  margin-bottom: 16px;
 }
 
 .results-card {
-  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.scenario-section {
+  margin-top: 16px;
+}
+
+.settings-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settings-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-color);
 }
 
 .running-indicator {
@@ -1011,12 +959,6 @@ onMounted(() => {
 @keyframes spin {
   to {
     transform: rotate(360deg);
-  }
-}
-
-@media (max-width: 1200px) {
-  .monte-layout {
-    grid-template-columns: 1fr;
   }
 }
 </style>

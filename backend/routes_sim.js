@@ -1,10 +1,6 @@
 // Local files
 const { runSimulation } = require('./sim/des/engine');
 const { runMonteCarlo } = require('./sim/monte/engine');
-// Rust native addons (.node files) - lightning fast native binaries
-const nativeBindings = require('./wasm/bindings');
-const runSimulationNative = nativeBindings.runSimulation;
-const runMonteCarloNative = nativeBindings.runMonteCarlo;
 
 module.exports = function registerSimRoutes(app, utils) {
   const { path, fs } = utils;
@@ -66,7 +62,7 @@ module.exports = function registerSimRoutes(app, utils) {
   });
 
   // Run a DES simulation with provided scenario and state
-  app.post('/api/sim/run', async (req, res) => {
+  app.post('/api/sim/run_des', async (req, res) => {
     try {
       let scenario = null;
       const body = req.body || {};
@@ -83,8 +79,6 @@ module.exports = function registerSimRoutes(app, utils) {
       }
       const state = body.state;
       const results = await runSimulation(scenario, { state, overrides });
-      // Rust version
-      // const results = await runSimulationNative(scenario, { state, overrides });
       res.json({ ok: true, results });
     } catch (error) {
       console.error('DES simulation run failed:', error);
@@ -93,7 +87,7 @@ module.exports = function registerSimRoutes(app, utils) {
   });
 
   // Run a Monte Carlo simulation with provided scenario and state
-  app.post('/api/sim/monte/run', async (req, res) => {
+  app.post('/api/sim/run_monte', async (req, res) => {
     try {
       let scenario = null;
       const body = req.body || {};
@@ -103,7 +97,6 @@ module.exports = function registerSimRoutes(app, utils) {
       const overrides = (body.overrides && typeof body.overrides === 'object') ? body.overrides : null;
       const iterations = (typeof body.iterations === 'number' && body.iterations > 0) ? body.iterations : 1000;
       const keepIterations = (typeof body.keepIterations === 'boolean') ? body.keepIterations : false;
-      
       if (body.scenario && typeof body.scenario === 'object') {
         scenario = body.scenario;
       } else {
@@ -112,18 +105,20 @@ module.exports = function registerSimRoutes(app, utils) {
         scenario = JSON.parse(content);
       }
       const state = body.state;
-      const simulateSettings = (body.simulateSettings && Array.isArray(body.simulateSettings)) 
-        ? body.simulateSettings 
+      const algorithm = (body.algorithm && ['Step', 'PERT'].includes(body.algorithm)) 
+        ? body.algorithm 
+        : 'PERT'; // Default to PERT
+      const simulateSettings = (body.simulateSettings && Array.isArray(body.simulateSettings))
+        ? body.simulateSettings
         : undefined;
-      const results = await runMonteCarlo(scenario, { 
-        state, 
-        overrides, 
-        iterations, 
+      const results = await runMonteCarlo(scenario, {
+        state,
+        overrides,
+        iterations,
+        algorithm,
         keepIterations,
         simulateSettings
       });
-      // Rust version
-      // const results = await runMonteCarloNative(scenario, { state, overrides, iterations, keepIterations });
       res.json({ ok: true, results });
     } catch (error) {
       console.error('Monte Carlo simulation run failed:', error);

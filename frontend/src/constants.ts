@@ -23,5 +23,5 @@ export const API_APP_STATE = `${BACKEND_API}/app/state`
 // Sim
 export const API_SIM_SCENARIOS = `${BACKEND_API}/sim/scenarios`
 export const API_SIM_SCENARIO = `${BACKEND_API}/sim/scenario`
-export const API_SIM_RUN = `${BACKEND_API}/sim/run`
-export const API_SIM_MONTE_RUN = `${BACKEND_API}/sim/monte/run`
+export const API_SIM_RUN_DES = `${BACKEND_API}/sim/run_des`
+export const API_SIM_RUN_MONTE = `${BACKEND_API}/sim/run_monte`

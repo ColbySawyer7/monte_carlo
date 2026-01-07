@@ -2,14 +2,17 @@
 // TODO: review this file for cleanup and optimization
 import { ref, onMounted, computed, watch } from 'vue'
 
+// des specific components
 import Timelines from '../../components/des/Timelines.vue'
 import Scenario from '../../components/des/Scenario.vue'
 import Config from '../../components/des/Config.vue'
 import Overview from '../../components/des/Overview.vue'
 import Results from '../../components/des/Results.vue'
-import { loadState, type State } from '../../state'
-import { API_SIM_RUN } from '../../constants'
 import { DESconfigDefaults } from './DESconfigDefaults'
+import { useLocalStorage } from '../../composables/useLocalStorage'
+
+import { loadState, type State } from '../../state'
+import { API_SIM_RUN_DES } from '../../constants'
 
 // Use shared DES config defaults for initial values
 const {
@@ -22,8 +25,6 @@ const {
   currentConfig,
   resetToDefaults,
   hasLoadedScenario,
-  saveToLocalStorage,
-  loadFromLocalStorage,
   simulationResults,
   resultsScenarioName,
   resultsTimestamp,
@@ -31,6 +32,50 @@ const {
 } = DESconfigDefaults()
 const isRunning = ref(false)
 const hasUnsavedChanges = ref(false)
+
+// Use centralized localStorage composable
+const storage = useLocalStorage()
+
+// Save DES state to localStorage
+function saveDESState() {
+  storage.saveDESState(
+    {
+      processTimes: processTimes.value,
+      simSettings: simSettings.value,
+      missionTypes: missionTypes.value,
+      demand: demand.value,
+      dutyRequirements: dutyRequirements.value,
+      personnelAvailability: personnelAvailability.value,
+      hasLoadedScenario: hasLoadedScenario.value,
+      currentScenarioName: currentScenarioName.value
+    },
+    {
+      simulationResults: simulationResults.value,
+      resultsScenarioName: resultsScenarioName.value,
+      resultsTimestamp: resultsTimestamp.value
+    }
+  )
+}
+
+// Load DES state from localStorage
+function loadDESState(): boolean {
+  const state = storage.loadDESState()
+  if (!state) return false
+
+  processTimes.value = state.config.processTimes
+  simSettings.value = state.config.simSettings
+  missionTypes.value = state.config.missionTypes
+  demand.value = state.config.demand
+  dutyRequirements.value = state.config.dutyRequirements
+  personnelAvailability.value = state.config.personnelAvailability
+  hasLoadedScenario.value = state.config.hasLoadedScenario
+  currentScenarioName.value = state.config.currentScenarioName
+  simulationResults.value = state.results.simulationResults
+  resultsScenarioName.value = state.results.resultsScenarioName
+  resultsTimestamp.value = state.results.resultsTimestamp
+
+  return true
+}
 
 // Store original override values from state API
 const originalOverrides = ref({
@@ -235,7 +280,7 @@ async function loadOverrideDefaults() {
 }
 
 // Scenario Handlers
-function handleScenarioLoaded(content: any, scenarioId?: string) {
+function handleScenarioLoaded(content: any) {
   currentScenarioName.value = content.name || 'Loaded Scenario'
   hasLoadedScenario.value = true  // Mark that a scenario has been loaded
 
@@ -571,7 +616,7 @@ function handleScenarioLoaded(content: any, scenarioId?: string) {
   }
 
   // Save to localStorage after loading scenario
-  saveToLocalStorage(scenarioId)
+  saveDESState()
 }
 
 function handleNewScenario() {
@@ -588,8 +633,8 @@ function handleNewScenario() {
   // Disable resource overrides
   simSettings.value.enableOverrides = false
 
-  // Save to localStorage after creating new scenario (no scenario ID)
-  saveToLocalStorage(undefined)
+  // Save to localStorage after creating new scenario
+  saveDESState()
 }
 
 async function handleRunScenario() {
@@ -718,8 +763,8 @@ async function handleRunScenario() {
       }
     }
 
-    // POST to /api/sim/run
-    const response = await fetch(API_SIM_RUN, {
+    // POST to /api/sim/run_des
+    const response = await fetch(API_SIM_RUN_DES, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scenario, state, overrides })
@@ -735,8 +780,8 @@ async function handleRunScenario() {
     resultsScenarioName.value = currentScenarioName.value
     resultsTimestamp.value = new Date().toLocaleString()
 
-    // Save results to localStorage (pass current scenario name to preserve it)
-    saveToLocalStorage(currentScenarioName.value)
+    // Save results to localStorage
+    saveDESState()
 
     // Restore scroll position after next render
     await new Promise(resolve => setTimeout(resolve, 0))
@@ -757,10 +802,10 @@ onMounted(() => {
   loadOverrideDefaults()
 
   // Try to load from localStorage first
-  const result = loadFromLocalStorage()
+  const hasState = loadDESState()
 
   // Only initialize with defaults if nothing was saved in localStorage
-  if (!result.success) {
+  if (!hasState) {
     handleNewScenario()
   }
   // Note: Scenario component will restore selection via its own localStorage check

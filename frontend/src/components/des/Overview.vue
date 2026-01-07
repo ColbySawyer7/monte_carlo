@@ -100,23 +100,6 @@ function formatDemand(demandEntries: DemandEntry[]): string {
   return parts.join(', ')
 }
 
-// Format result value - handles both simple numbers (DES) and statistics objects (Monte Carlo)
-function formatResultValue(value: any): string {
-  if (value === undefined || value === null) return '—'
-  
-  // If it's a statistics object (Monte Carlo), show mean with stddev
-  if (typeof value === 'object' && value !== null && 'mean' in value) {
-    const mean = typeof value.mean === 'number' ? Math.round(value.mean) : value.mean
-    const stddev = typeof value.stddev === 'number' && value.stddev > 0 
-      ? ` ±${Math.round(value.stddev)}` 
-      : ''
-    return `${mean}${stddev}`
-  }
-  
-  // Otherwise, it's a simple number (DES)
-  return typeof value === 'number' ? value.toString() : String(value)
-}
-
 // Calculate demand and process times per mission type
 const missionSummary = computed(() => {
   const missions = props.missionTypes.map(mt => {
@@ -190,10 +173,10 @@ const missionSummary = computed(() => {
 
     // Get results for this mission type if available
     const resultsForType = props.results?.by_type?.[m.name]
-    const requested = formatResultValue(resultsForType?.requested)
-    const started = formatResultValue(resultsForType?.started)
-    const completed = formatResultValue(resultsForType?.completed)
-    const rejected = formatResultValue(resultsForType?.rejected)
+    const requested = resultsForType?.requested ?? '—'
+    const started = resultsForType?.started ?? '—'
+    const completed = resultsForType?.completed ?? '—'
+    const rejected = resultsForType?.rejected ?? '—'
 
     return {
       ...m,
@@ -590,12 +573,6 @@ const policyDisplay = computed(() => {
   text-align: center;
   font-family: monospace;
   color: var(--text-color);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100px;
-  padding: 4px 8px;
-  font-size: 0.85rem;
 }
 
 .demand-text {

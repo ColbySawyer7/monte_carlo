@@ -85,6 +85,7 @@ const INITIAL_DEFAULTS = {
     horizonHours: 24,
     queueing: 'reject_if_unavailable' as const,
     enableOverrides: false,
+    algorithm: 'PERT' as const,
     overrides: {
       vmu1: {
         aircraft: 0,
@@ -288,69 +289,6 @@ export const resultsScenarioName = ref<string>('')
 export const resultsTimestamp = ref<string>('')
 export const currentScenarioName = ref<string>('New Scenario')
 
-// Scenario selection state
-export const selectedScenarioId = ref<string>('')
-export const scenarioDescription = ref<string>('')
-export const scenarioCategory = ref<string>('')
-export const originalConfigHash = ref<string>('')
-
-// Save current config to localStorage
-export function saveToLocalStorage(scenarioName?: string) {
-  try {
-    const state = {
-      processTimes: processTimes.value,
-      simSettings: simSettings.value,
-      missionTypes: missionTypes.value,
-      demand: demand.value,
-      dutyRequirements: dutyRequirements.value,
-      personnelAvailability: personnelAvailability.value,
-      hasLoadedScenario: hasLoadedScenario.value,
-      currentScenarioName: scenarioName || currentScenarioName.value,
-      simulationResults: simulationResults.value,
-      resultsScenarioName: resultsScenarioName.value,
-      resultsTimestamp: resultsTimestamp.value,
-      selectedScenarioId: selectedScenarioId.value,
-      scenarioDescription: scenarioDescription.value,
-      scenarioCategory: scenarioCategory.value,
-      originalConfigHash: originalConfigHash.value
-    }
-    localStorage.setItem('desScenarioState', JSON.stringify(state))
-  } catch (error) {
-    console.error('Failed to save to localStorage:', error)
-  }
-}
-
-// Load config from localStorage
-export function loadFromLocalStorage(): { success: boolean; scenarioName?: string } {
-  try {
-    const saved = localStorage.getItem('desScenarioState')
-    if (!saved) return { success: false }
-
-    const state = JSON.parse(saved)
-
-    processTimes.value = state.processTimes
-    simSettings.value = state.simSettings
-    missionTypes.value = state.missionTypes
-    demand.value = state.demand
-    dutyRequirements.value = state.dutyRequirements
-    personnelAvailability.value = state.personnelAvailability
-    hasLoadedScenario.value = state.hasLoadedScenario ?? false
-    currentScenarioName.value = state.currentScenarioName || 'New Scenario'
-    simulationResults.value = state.simulationResults || null
-    resultsScenarioName.value = state.resultsScenarioName || ''
-    resultsTimestamp.value = state.resultsTimestamp || ''
-    selectedScenarioId.value = state.selectedScenarioId || ''
-    scenarioDescription.value = state.scenarioDescription || ''
-    scenarioCategory.value = state.scenarioCategory || ''
-    originalConfigHash.value = state.originalConfigHash || ''
-
-    return { success: true, scenarioName: state.currentScenarioName }
-  } catch (error) {
-    console.error('Failed to load from localStorage:', error)
-    return { success: false }
-  }
-}
-
 export function DESconfigDefaults() {
   return {
     processTimes,
@@ -362,15 +300,9 @@ export function DESconfigDefaults() {
     currentConfig,
     resetToDefaults,
     hasLoadedScenario,
-    saveToLocalStorage,
-    loadFromLocalStorage,
     simulationResults,
     resultsScenarioName,
     resultsTimestamp,
-    currentScenarioName,
-    selectedScenarioId,
-    scenarioDescription,
-    scenarioCategory,
-    originalConfigHash
+    currentScenarioName
   }
 }

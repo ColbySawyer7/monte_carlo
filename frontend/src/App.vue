@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { load, save } from './composables/useLocalStorage'
 
 import Aircraft from './views/instance/Aircraft.vue'
 import Payload from './views/instance/Payload.vue'
 import Staffing from './views/instance/Staffing.vue'
 import Unit from './views/instance/Unit.vue'
 
-import Monte from './views/Monte.vue'
+import Monte from './views/sim/Monte.vue'
 import DES from './views/sim/DES.vue'
 import DESconfigInspector from './views/sim/DESconfigInspector.vue'
 
@@ -21,13 +22,13 @@ const isDarkMode = ref(false)
 
 // Initialize theme and active tab from localStorage
 onMounted(() => {
-  const savedTheme = localStorage.getItem('theme')
+  const savedTheme = load<string>('theme')
   if (savedTheme) {
     isDarkMode.value = savedTheme === 'dark'
   }
   applyTheme()
 
-  const savedTab = localStorage.getItem('activeTab')
+  const savedTab = load<string>('activeTab')
   if (savedTab) {
     activeTab.value = savedTab
   }
@@ -36,12 +37,12 @@ onMounted(() => {
 function toggleTheme() {
   isDarkMode.value = !isDarkMode.value
   applyTheme()
-  localStorage.setItem('theme', isDarkMode.value ? 'dark' : 'light')
+  save('theme', isDarkMode.value ? 'dark' : 'light')
 }
 
 function setActiveTab(tab: string) {
   activeTab.value = tab
-  localStorage.setItem('activeTab', tab)
+  save('activeTab', tab)
 }
 
 function applyTheme() {

@@ -41,14 +41,14 @@ function shouldLog(level) {
     verbose: 4,
     debug: 5
   };
-  
+
   // Normalize to lowercase for case-insensitive matching
   const normalizedLevel = String(level).toLowerCase();
   const normalizedCurrent = String(currentLogLevel).toLowerCase();
-  
+
   const currentLevel = levels[normalizedCurrent] !== undefined ? levels[normalizedCurrent] : levels.verbose;
   const messageLevel = levels[normalizedLevel] !== undefined ? levels[normalizedLevel] : levels.verbose;
-  
+
   // Log if message level is at or below current level threshold
   // silent (0) = log nothing, verbose (4) = log verbose and below, etc.
   // So we log when messageLevel <= currentLevel
@@ -68,7 +68,7 @@ function logWithLocation(message, data = undefined, level = 'verbose') {
   if (!shouldLog(level)) {
     return;
   }
-  
+
   const stack = new Error().stack.split('\n')[2]; // [2] to skip Error and this function
   const match = stack.match(/at\s+(.+?)\s+\((.+?):(\d+):(\d+)\)/) ||
     stack.match(/at\s+(.+?):(\d+):(\d+)/);
@@ -398,9 +398,9 @@ function logResourcePoolsInitialized(unit, acTotal, effectivePilots, fullPilots,
   logWithLocation(`\n`);
 }
 
-module.exports = { 
-  logWithLocation, 
-  logPersonnelAvailability, 
+module.exports = {
+  logWithLocation,
+  logPersonnelAvailability,
   logResourcePoolsInitialized,
   setLogLevel,
   getLogLevel

@@ -7,6 +7,7 @@ import {
   type ConfigField
 } from './DESconfigIntrospection'
 import { DESconfigDefaults } from './DESconfigDefaults'
+import { useLocalStorage } from '../../composables/useLocalStorage'
 
 // Use live DES config from shared composable - get all reactive refs
 const {
@@ -17,8 +18,12 @@ const {
   demand,
   dutyRequirements,
   personnelAvailability,
-  saveToLocalStorage
+  hasLoadedScenario,
+  currentScenarioName
 } = DESconfigDefaults()
+
+// Use localStorage composable for saving
+const storage = useLocalStorage()
 
 // Map category names to their corresponding reactive refs
 const reactiveRefs: Record<string, any> = {
@@ -79,7 +84,23 @@ function updateFieldValue(field: ConfigField, newValue: any) {
     target[lastKey] = newValue
 
     // Save to localStorage after updating
-    saveToLocalStorage()
+    storage.saveDESState(
+      {
+        processTimes: processTimes.value,
+        simSettings: simSettings.value,
+        missionTypes: missionTypes.value,
+        demand: demand.value,
+        dutyRequirements: dutyRequirements.value,
+        personnelAvailability: personnelAvailability.value,
+        hasLoadedScenario: hasLoadedScenario.value,
+        currentScenarioName: currentScenarioName.value
+      },
+      {
+        simulationResults: null,
+        resultsScenarioName: '',
+        resultsTimestamp: ''
+      }
+    )
   }
 }
 

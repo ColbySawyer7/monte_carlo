@@ -8,6 +8,8 @@ const { processPersonnel } = require('./stages/stage3-personnel');
 const { processOperations } = require('./stages/stage4-operations');
 const { runSimulation: runSimulationStage } = require('./stages/stage5-simulation');
 const { generateResults } = require('./stages/stage6-results');
+
+// Utility for log level management
 const { setLogLevel, getLogLevel } = require('../../utils');
 
 /**
@@ -27,35 +29,35 @@ async function runSimulation(scenario, settings = {}) {
   if (settings.logLevel !== undefined && settings.logLevel !== null) {
     setLogLevel(settings.logLevel);
   }
-  
+
   try {
-  // Stage 1: Process scenario configuration
-  const config = processScenario(scenario);
+    // Stage 1: Process scenario configuration
+    const config = processScenario(scenario);
 
-  // Stage 2: Apply settings (load state and overrides)
-  const initial = applySettings(settings, scenario);
+    // Stage 2: Apply settings (load state and overrides)
+    const initial = applySettings(settings, scenario);
 
-  // Stage 3: Process personnel configuration
-  const personnel = processPersonnel(scenario, initial);
+    // Stage 3: Process personnel configuration
+    const personnel = processPersonnel(scenario, initial);
 
-  // Stage 4: Process operations (demand generation and resource pools)
-  const operations = processOperations(scenario, initial, personnel);
+    // Stage 4: Process operations (demand generation and resource pools)
+    const operations = processOperations(scenario, initial, personnel);
 
-  // Stage 5: Run simulation (process all events)
-  const context = {
-    events: operations.events,
-    pools: operations.pools,
-    unitList: operations.unitList,
-    horizon: config.horizon,
-    missionTypes: config.missionTypes,
-    preSpec: config.preSpec,
-    postSpec: config.postSpec,
-    turnSpec: config.turnSpec,
-    scenario,
-    initial,
-    overrides: settings.overrides && settings.overrides.units ? settings.overrides.units : null
-  };
-  const partialResults = runSimulationStage(context);
+    // Stage 5: Run simulation (process all events)
+    const context = {
+      events: operations.events,
+      pools: operations.pools,
+      unitList: operations.unitList,
+      horizon: config.horizon,
+      missionTypes: config.missionTypes,
+      preSpec: config.preSpec,
+      postSpec: config.postSpec,
+      turnSpec: config.turnSpec,
+      scenario,
+      initial,
+      overrides: settings.overrides && settings.overrides.units ? settings.overrides.units : null
+    };
+    const partialResults = runSimulationStage(context);
 
     // Stage 6: Generate final results
     const resultsContext = {
@@ -66,6 +68,7 @@ async function runSimulation(scenario, settings = {}) {
       scenario
     };
     return generateResults(partialResults, resultsContext);
+
   } finally {
     // Restore previous log level
     if (settings.logLevel) {

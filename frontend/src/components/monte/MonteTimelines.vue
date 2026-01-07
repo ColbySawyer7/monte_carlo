@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { load, save } from '../../composables/useLocalStorage'
 import DESTimelines from '../des/Timelines.vue'
 
 interface PercentileTimeline {
@@ -33,63 +34,63 @@ const props = defineProps<Props>()
 
 // Percentile tab options with user-friendly descriptions
 const percentileOptions = [
-  { 
-    key: 'mean', 
-    label: 'Mean', 
+  {
+    key: 'mean',
+    label: 'Mean',
     description: 'Average outcome across all runs',
     explanation: 'Shows the timeline from the simulation run that had the average number of completed missions'
   },
-  { 
-    key: 'p10', 
-    label: 'P10', 
+  {
+    key: 'p10',
+    label: 'P10',
     description: 'Optimistic scenario (10% did better)',
     explanation: '10% of simulation runs had more completed missions. This represents a best-case scenario.'
   },
-  { 
-    key: 'p25', 
-    label: 'P25', 
+  {
+    key: 'p25',
+    label: 'P25',
     description: '25% of runs did better',
     explanation: '25% of simulation runs had more completed missions. This is a relatively good outcome.'
   },
-  { 
-    key: 'p50', 
-    label: 'P50 (Median)', 
+  {
+    key: 'p50',
+    label: 'P50 (Median)',
     description: 'Typical outcome (50% did better)',
     explanation: 'Half of all simulation runs had more completed missions, half had fewer. This is the most representative outcome.'
   },
-  { 
-    key: 'p75', 
-    label: 'P75', 
+  {
+    key: 'p75',
+    label: 'P75',
     description: '75% of runs did better',
     explanation: '75% of simulation runs had more completed missions. This represents a below-average outcome.'
   },
-  { 
-    key: 'p90', 
-    label: 'P90', 
+  {
+    key: 'p90',
+    label: 'P90',
     description: 'Pessimistic scenario (90% did better)',
     explanation: '90% of simulation runs had more completed missions. This represents a worst-case scenario.'
   },
-  { 
-    key: 'p95', 
-    label: 'P95', 
+  {
+    key: 'p95',
+    label: 'P95',
     description: '95% of runs did better',
     explanation: '95% of simulation runs had more completed missions. This is a very poor outcome.'
   },
-  { 
-    key: 'p99', 
-    label: 'P99', 
+  {
+    key: 'p99',
+    label: 'P99',
     description: '99% of runs did better',
     explanation: '99% of simulation runs had more completed missions. This is an extremely poor outcome.'
   },
-  { 
-    key: 'min', 
-    label: 'Min', 
+  {
+    key: 'min',
+    label: 'Min',
     description: 'Best case outcome',
     explanation: 'The simulation run with the most completed missions - the absolute best possible outcome.'
   },
-  { 
-    key: 'max', 
-    label: 'Max', 
+  {
+    key: 'max',
+    label: 'Max',
     description: 'Worst case outcome',
     explanation: 'The simulation run with the fewest completed missions - the absolute worst possible outcome.'
   }
@@ -99,7 +100,7 @@ const activePercentile = ref<string>('p50')
 
 // Load saved percentile from localStorage
 onMounted(() => {
-  const savedPercentile = localStorage.getItem('monteTimelineActivePercentile')
+  const savedPercentile = load<string>('monteTimelineActivePercentile')
   if (savedPercentile && props.percentileTimelines?.[savedPercentile]) {
     activePercentile.value = savedPercentile
   }
@@ -107,7 +108,7 @@ onMounted(() => {
 
 // Save percentile to localStorage
 watch(activePercentile, (newPercentile) => {
-  localStorage.setItem('monteTimelineActivePercentile', newPercentile)
+  save('monteTimelineActivePercentile', newPercentile)
 })
 
 // Get current percentile timeline data
@@ -121,11 +122,6 @@ const currentPercentileInfo = computed(() => {
   return percentileOptions.find(opt => opt.key === activePercentile.value)
 })
 
-// Format standard deviation display
-function formatStdDev(stddev: number): string {
-  if (stddev === 0) return ''
-  return `±${stddev.toFixed(1)}`
-}
 </script>
 
 <template>
@@ -137,20 +133,13 @@ function formatStdDev(stddev: number): string {
     <div v-else>
       <!-- Percentile Selector Tabs -->
       <div class="percentile-tabs">
-        <button
-          v-for="option in percentileOptions"
-          :key="option.key"
+        <button v-for="option in percentileOptions" :key="option.key"
           :class="['percentile-tab', { active: activePercentile === option.key }]"
-          :disabled="!percentileTimelines?.[option.key]"
-          @click="activePercentile = option.key"
-          :title="option.description"
-        >
+          :disabled="!percentileTimelines?.[option.key]" @click="activePercentile = option.key"
+          :title="option.description">
           <span class="tab-label">{{ option.label }}</span>
           <span v-if="percentileTimelines?.[option.key]" class="tab-stats">
-            {{ percentileTimelines[option.key].missionsCompleted }} missions
-            <span v-if="percentileTimelines[option.key].stddev > 0" class="stddev">
-              {{ formatStdDev(percentileTimelines[option.key].stddev) }}
-            </span>
+            {{ percentileTimelines[option.key]?.missionsCompleted }} missions
           </span>
         </button>
       </div>
@@ -164,9 +153,6 @@ function formatStdDev(stddev: number): string {
           </div>
           <div class="info-stats">
             <span class="info-missions">{{ currentTimeline.missionsCompleted }} missions completed</span>
-            <span v-if="currentTimeline.stddev > 0" class="info-stddev">
-              Variation: {{ formatStdDev(currentTimeline.stddev) }}
-            </span>
           </div>
           <div v-if="currentPercentileInfo.explanation" class="info-explanation">
             {{ currentPercentileInfo.explanation }}
@@ -176,16 +162,10 @@ function formatStdDev(stddev: number): string {
 
       <!-- DES Timeline Component (reused) -->
       <div v-if="currentTimeline" class="timeline-wrapper">
-        <DESTimelines
-          :timeline="currentTimeline.timeline"
-          :raw-timeline="currentTimeline.rawTimeline"
-          :availability-timeline="currentTimeline.availabilityTimeline"
-          :horizon-hours="horizonHours"
-          :unit-split="unitSplit || { vmu1: 0.5, vmu3: 0.5 }"
-          :personnel-availability="personnelAvailability"
-          :initial-resources="initialResources"
-          :utilization="utilization"
-        />
+        <DESTimelines :timeline="currentTimeline.timeline" :raw-timeline="currentTimeline.rawTimeline"
+          :availability-timeline="currentTimeline.availabilityTimeline" :horizon-hours="horizonHours"
+          :unit-split="unitSplit || { vmu1: 0.5, vmu3: 0.5 }" :personnel-availability="personnelAvailability"
+          :initial-resources="initialResources" :utilization="utilization" />
       </div>
     </div>
   </div>
@@ -347,4 +327,3 @@ function formatStdDev(stddev: number): string {
   }
 }
 </style>
-

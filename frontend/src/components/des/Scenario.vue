@@ -1,17 +1,8 @@
 <script setup lang="ts">
 // TODO: review this file for cleanup and optimization
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { API_SIM_SCENARIOS, API_SIM_SCENARIO } from '../../constants'
-import { DESconfigDefaults } from '../../views/sim/DESconfigDefaults'
-
-// Use shared state for scenario selection
-const {
-  selectedScenarioId,
-  scenarioDescription: sharedScenarioDescription,
-  scenarioCategory: sharedScenarioCategory,
-  originalConfigHash: sharedOriginalConfigHash,
-  saveToLocalStorage
-} = DESconfigDefaults()
+import { useLocalStorage } from '../../composables/useLocalStorage'
 
 // Click outside directive
 const vClickOutside = {
@@ -35,10 +26,6 @@ interface Scenario {
   isCustom?: boolean
 }
 
-interface StoredCustomScenario extends Scenario {
-  config: any
-}
-
 interface ScenarioContent {
   name?: string
   category?: string
@@ -52,6 +39,9 @@ interface Props {
   loading?: boolean
   currentConfig?: any
   hasUnsavedChanges?: boolean
+  filterCategory?: string | string[]
+  mode?: 'des' | 'monte'
+  disableChangeTracking?: boolean
 }
 
 interface Emits {
@@ -62,17 +52,20 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  loading: false
+  loading: false,
+  filterCategory: 'all',
+  mode: 'des',
+  disableChangeTracking: false
 })
 
 const emit = defineEmits<Emits>()
 
 const scenarios = ref<Scenario[]>([])
-// Use shared state for selectedScenario
-const selectedScenario = selectedScenarioId
-const scenarioDescription = sharedScenarioDescription
-const scenarioCategory = sharedScenarioCategory
-const originalConfigHash = sharedOriginalConfigHash
+// Local state for scenario selection (separate for each mode)
+const selectedScenario = ref<string>('')
+const scenarioDescription = ref<string>('')
+const scenarioCategory = ref<string>('')
+const originalConfigHash = ref<string>('')
 const statusMessage = ref<string>('')
 const statusError = ref<boolean>(false)
 const isDropdownOpen = ref<boolean>(false)
@@ -82,8 +75,47 @@ const saveScenarioName = ref<string>('')
 // Store categories for all scenarios
 const scenarioCategories = ref<Record<string, string>>({})
 
-const CUSTOM_SCENARIOS_KEY = 'desCustomScenarios'
 const MAX_CUSTOM_SCENARIOS = 6
+
+// Use centralized localStorage composable
+const storage = useLocalStorage()
+
+// Save scenario selection state to localStorage
+function saveSelectionToLocalStorage() {
+  storage.saveSelection(props.mode, {
+    selectedScenarioId: selectedScenario.value,
+    scenarioDescription: scenarioDescription.value,
+    scenarioCategory: scenarioCategory.value,
+    originalConfigHash: originalConfigHash.value
+  })
+}
+
+// Load scenario selection state from localStorage
+function loadSelectionFromLocalStorage() {
+  const state = storage.loadSelection(props.mode)
+  if (!state) return
+
+  selectedScenario.value = state.selectedScenarioId || ''
+  scenarioDescription.value = state.scenarioDescription || ''
+  scenarioCategory.value = state.scenarioCategory || ''
+  originalConfigHash.value = state.originalConfigHash || ''
+}
+
+// Computed property to filter scenarios by category
+const filteredScenarios = computed(() => {
+  if (!props.filterCategory || props.filterCategory === 'all') {
+    return scenarios.value
+  }
+
+  const categories = Array.isArray(props.filterCategory)
+    ? props.filterCategory.map(c => c.toLowerCase())
+    : [props.filterCategory.toLowerCase()]
+
+  return scenarios.value.filter(s => {
+    const category = scenarioCategories.value[s.id]
+    return category && categories.includes(category.toLowerCase())
+  })
+})
 
 // Simple hash function for config comparison
 function hashConfig(config: any): string {
@@ -95,59 +127,24 @@ function hashConfig(config: any): string {
   }
 }
 
-// Local Storage Functions
-function getCustomScenarios(): StoredCustomScenario[] {
-  try {
-    const stored = localStorage.getItem(CUSTOM_SCENARIOS_KEY)
-    return stored ? JSON.parse(stored) : []
-  } catch {
-    return []
-  }
-}
-
 function saveCustomScenario(name: string, config: any) {
-  const customScenarios = getCustomScenarios()
-  const id = `custom-${Date.now()}`
-
-  const scenarioWithConfig: StoredCustomScenario = {
-    id,
-    name,
-    file: '',
-    isCustom: true,
-    config
+  const newScenario = storage.addCustomScenario(props.mode, name, config, MAX_CUSTOM_SCENARIOS)
+  if (!newScenario) {
+    throw new Error(`Maximum of ${MAX_CUSTOM_SCENARIOS} custom scenarios reached`)
   }
-
-  customScenarios.unshift(scenarioWithConfig)
-
-  // Keep only the last MAX_CUSTOM_SCENARIOS
-  if (customScenarios.length > MAX_CUSTOM_SCENARIOS) {
-    customScenarios.splice(MAX_CUSTOM_SCENARIOS)
-  }
-
-  localStorage.setItem(CUSTOM_SCENARIOS_KEY, JSON.stringify(customScenarios))
-  return scenarioWithConfig
+  return newScenario
 }
 
 function updateCustomScenario(id: string, config: any) {
-  const customScenarios = getCustomScenarios()
-  const index = customScenarios.findIndex(s => s.id === id)
-
-  if (index !== -1 && customScenarios[index]) {
-    customScenarios[index].config = config
-    localStorage.setItem(CUSTOM_SCENARIOS_KEY, JSON.stringify(customScenarios))
-  }
+  storage.updateCustomScenario(props.mode, id, config)
 }
 
 function deleteCustomScenario(id: string) {
-  const customScenarios = getCustomScenarios()
-  const filtered = customScenarios.filter(s => s.id !== id)
-  localStorage.setItem(CUSTOM_SCENARIOS_KEY, JSON.stringify(filtered))
+  storage.deleteCustomScenario(props.mode, id)
 }
 
 function loadCustomScenario(id: string): ScenarioContent | null {
-  const customScenarios = getCustomScenarios()
-  const scenario = customScenarios.find(s => s.id === id)
-  return scenario?.config || null
+  return storage.loadCustomScenario(props.mode, id)
 }
 
 // Transform frontend config format to API format for consistent loading
@@ -262,10 +259,16 @@ function transformToApiFormat(config: any): any {
   return transformed
 }
 
-// Watch for config changes
+// Watch for config changes (only if tracking is enabled)
 watch(
   () => props.currentConfig,
   (newConfig) => {
+    if (props.disableChangeTracking) {
+      hasUnsavedChanges.value = false
+      emit('update:hasUnsavedChanges', false)
+      return
+    }
+
     if (!selectedScenario.value || !originalConfigHash.value) {
       hasUnsavedChanges.value = false
       emit('update:hasUnsavedChanges', false)
@@ -318,7 +321,7 @@ async function handleScenarioChange() {
   setStatus('Loading scenario…', false)
   try {
     // Check if it's a custom scenario
-    const scenario = scenarios.value.find(s => s.id === selectedScenario.value)
+    const scenario = filteredScenarios.value.find(s => s.id === selectedScenario.value)
 
     if (scenario?.isCustom) {
       const content = loadCustomScenario(selectedScenario.value)
@@ -364,7 +367,7 @@ async function handleScenarioChange() {
     emit('update:hasUnsavedChanges', false)
 
     // Save scenario selection to localStorage
-    saveToLocalStorage()
+    saveSelectionToLocalStorage()
   } catch (error) {
     setStatus((error as Error).message, true)
   }
@@ -378,6 +381,7 @@ async function handleReset() {
   originalConfigHash.value = ''
   hasUnsavedChanges.value = false
   emit('update:hasUnsavedChanges', false)
+  saveSelectionToLocalStorage()
   setStatus('Reset to default settings', false)
   emit('new-scenario')
 }
@@ -412,7 +416,7 @@ function handleSave() {
   // If a name is provided in the save input, always create a new scenario
   if (saveScenarioName.value.trim()) {
     // Create new custom scenario - check if max reached
-    const customScenarios = getCustomScenarios()
+    const customScenarios = storage.getCustomScenarios(props.mode)
     if (customScenarios.length >= MAX_CUSTOM_SCENARIOS) {
       setStatus(`Maximum of ${MAX_CUSTOM_SCENARIOS} custom scenarios reached. Delete one to save a new one.`, true)
       return
@@ -434,7 +438,7 @@ function handleSave() {
     emit('update:hasUnsavedChanges', false)
   } else {
     // Create new custom scenario with auto-generated name
-    const customScenarios = getCustomScenarios()
+    const customScenarios = storage.getCustomScenarios(props.mode)
     if (customScenarios.length >= MAX_CUSTOM_SCENARIOS) {
       setStatus(`Maximum of ${MAX_CUSTOM_SCENARIOS} custom scenarios reached. Delete one to save a new one.`, true)
       return
@@ -485,21 +489,21 @@ function closeDropdown() {
 function handleKeydown(event: KeyboardEvent) {
   if (props.loading) return
 
-  const currentIndex = scenarios.value.findIndex(s => s.id === selectedScenario.value)
+  const currentIndex = filteredScenarios.value.findIndex(s => s.id === selectedScenario.value)
 
   if (event.key === 'ArrowDown') {
     event.preventDefault()
     if (isDropdownOpen.value) {
       // Navigate down in open dropdown
-      const nextIndex = (currentIndex + 1) % scenarios.value.length
-      if (scenarios.value[nextIndex]) {
-        selectScenario(scenarios.value[nextIndex].id)
+      const nextIndex = (currentIndex + 1) % filteredScenarios.value.length
+      if (filteredScenarios.value[nextIndex]) {
+        selectScenario(filteredScenarios.value[nextIndex].id)
       }
     } else {
       // Navigate down when closed
-      const nextIndex = (currentIndex + 1) % scenarios.value.length
-      if (scenarios.value[nextIndex]) {
-        selectedScenario.value = scenarios.value[nextIndex].id
+      const nextIndex = (currentIndex + 1) % filteredScenarios.value.length
+      if (filteredScenarios.value[nextIndex]) {
+        selectedScenario.value = filteredScenarios.value[nextIndex].id
         handleScenarioChange()
       }
     }
@@ -507,15 +511,15 @@ function handleKeydown(event: KeyboardEvent) {
     event.preventDefault()
     if (isDropdownOpen.value) {
       // Navigate up in open dropdown
-      const prevIndex = currentIndex - 1 < 0 ? scenarios.value.length - 1 : currentIndex - 1
-      if (scenarios.value[prevIndex]) {
-        selectScenario(scenarios.value[prevIndex].id)
+      const prevIndex = currentIndex - 1 < 0 ? filteredScenarios.value.length - 1 : currentIndex - 1
+      if (filteredScenarios.value[prevIndex]) {
+        selectScenario(filteredScenarios.value[prevIndex].id)
       }
     } else {
       // Navigate up when closed
-      const prevIndex = currentIndex - 1 < 0 ? scenarios.value.length - 1 : currentIndex - 1
-      if (scenarios.value[prevIndex]) {
-        selectedScenario.value = scenarios.value[prevIndex].id
+      const prevIndex = currentIndex - 1 < 0 ? filteredScenarios.value.length - 1 : currentIndex - 1
+      if (filteredScenarios.value[prevIndex]) {
+        selectedScenario.value = filteredScenarios.value[prevIndex].id
         handleScenarioChange()
       }
     }
@@ -539,7 +543,7 @@ async function refreshScenarioList(selectName?: string) {
     const list = await listScenarios()
 
     // Add custom scenarios from local storage
-    const customScenarios = getCustomScenarios()
+    const customScenarios = storage.getCustomScenarios(props.mode)
     const customScenarioList: Scenario[] = customScenarios.map(s => ({
       id: s.id,
       name: s.name,
@@ -579,7 +583,9 @@ async function refreshScenarioList(selectName?: string) {
 onMounted(async () => {
   await refreshScenarioList()
 
-  // Selection and originalConfigHash already restored from localStorage via composable
+  // Load scenario selection state from localStorage
+  loadSelectionFromLocalStorage()
+
   // Check for unsaved changes on mount
   if (selectedScenario.value && originalConfigHash.value) {
     await nextTick()
@@ -615,8 +621,8 @@ onMounted(async () => {
           </svg>
         </button>
         <button class="btn btn-icon success" @click="handleSave"
-          :disabled="loading || !currentConfig || (scenarios.find(s => s.id === selectedScenario)?.isCustom && !hasUnsavedChanges && !saveScenarioName.trim()) || (!scenarios.find(s => s.id === selectedScenario)?.isCustom && !saveScenarioName.trim() && getCustomScenarios().length >= MAX_CUSTOM_SCENARIOS)"
-          :title="saveScenarioName.trim() ? 'Save as new custom scenario' : scenarios.find(s => s.id === selectedScenario)?.isCustom && hasUnsavedChanges ? 'Update custom scenario' : getCustomScenarios().length >= MAX_CUSTOM_SCENARIOS ? `Maximum ${MAX_CUSTOM_SCENARIOS} custom scenarios reached` : 'Save as new custom scenario'">
+          :disabled="loading || !currentConfig || (scenarios.find(s => s.id === selectedScenario)?.isCustom && !hasUnsavedChanges && !saveScenarioName.trim()) || (!scenarios.find(s => s.id === selectedScenario)?.isCustom && !saveScenarioName.trim() && storage.getCustomScenarios(mode).length >= MAX_CUSTOM_SCENARIOS)"
+          :title="saveScenarioName.trim() ? 'Save as new custom scenario' : scenarios.find(s => s.id === selectedScenario)?.isCustom && hasUnsavedChanges ? 'Update custom scenario' : storage.getCustomScenarios(mode).length >= MAX_CUSTOM_SCENARIOS ? `Maximum ${MAX_CUSTOM_SCENARIOS} custom scenarios reached` : 'Save as new custom scenario'">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -651,7 +657,7 @@ onMounted(async () => {
           <div class="select-trigger" @click="toggleDropdown" :class="{ disabled: loading }">
             <span class="selected-text">
               {{
-                scenarios.find(s => s.id === selectedScenario)?.name ||
+                filteredScenarios.find(s => s.id === selectedScenario)?.name ||
                 'Select a prebuilt scenario, or run the current configuration...'
               }}
               <span v-if="hasUnsavedChanges && selectedScenario" class="modified-indicator">*</span>
@@ -662,7 +668,7 @@ onMounted(async () => {
             <span class="arrow">▼</span>
           </div>
           <div v-show="isDropdownOpen" class="select-dropdown">
-            <div v-for="scenario in scenarios" :key="scenario.id" class="select-option"
+            <div v-for="scenario in filteredScenarios" :key="scenario.id" class="select-option"
               :class="{ selected: scenario.id === selectedScenario }" @click="selectScenario(scenario.id)">
               <span class="option-text">{{ scenario.name }}</span>
               <button v-if="scenario.isCustom" class="btn-delete" @click="handleDelete(scenario.id, $event)"

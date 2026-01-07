@@ -14,8 +14,8 @@ services:
       - ./frontend/dist:/sorsim/frontend/dist
       # Named volume: preserve container's node_modules (prevents host overwrite)
       - backend_node_modules:/sorsim/backend/node_modules
-    # networks:
-    #   - alp
+    networks:
+      - alp
 
   frontend:
     container_name: sorsim-frontend
@@ -31,52 +31,15 @@ services:
       - ./frontend:/sorsim/frontend
       # Named volume: preserve container's node_modules (prevents host overwrite)
       - frontend_node_modules:/sorsim/frontend/node_modules
-    # networks:
-    #   - alp
+    networks:
+      - alp
     depends_on:
       - backend
 
-      
-  profiler:
-    container_name: sorsim-profiler
-    build:
-      context: .
-      dockerfile: sim-native/Dockerfile.profiler
-    # Privileged mode needed for perf to work
-    privileged: true
-    volumes:
-      - ./sim-native:/workspace/sim-native
-      - ./backend/sim/des/scenarios:/workspace/scenarios
-      - ./sim-native/profiles:/workspace/profiles
-    working_dir: /workspace
-    # Override CMD to keep container running
-    command: tail -f /dev/null
-    profiles:
-      - profiler  # Only start when explicitly requested
-
-  # Run DES profiling: docker-compose --profile profiler run --rm profiler-des baseline.json
-  profiler-des:
-    extends:
-      service: profiler
-    container_name: null  # Allow multiple instances
-    entrypoint: ["bash", "/workspace/sim-native/run-flamegraph.sh", "des"]
-    profiles:
-      - profiler
-
-  # Run Monte Carlo profiling: docker-compose --profile profiler run --rm profiler-monte baseline.json 500000
-  profiler-monte:
-    extends:
-      service: profiler
-    container_name: null  # Allow multiple instances
-    entrypoint: ["bash", "/workspace/sim-native/run-flamegraph.sh", "monte"]
-    profiles:
-      - profiler
-
-
-# networks:
-#   alp:
-#     name: alp_net
-#     external: true
+networks:
+  alp:
+    name: alp_net
+    external: true
 
 volumes:
   backend_node_modules:

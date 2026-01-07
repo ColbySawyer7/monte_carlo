@@ -1,18 +1,17 @@
 <script setup lang="ts">
 // TODO: review this file for cleanup and optimization
 import { ref, watch } from 'vue'
+import { load, save } from '../../../composables/useLocalStorage'
 import DutyRequirements from './personnel/DutyRequirements.vue'
 import AvailabilityFactors from './personnel/AvailabilityFactors.vue'
 
-const STORAGE_KEY = 'desPersonnelActiveTab'
-
 const activeTab = ref<'duty' | 'availability'>(
-  (localStorage.getItem(STORAGE_KEY) as any) || 'duty'
+  load<'duty' | 'availability'>('desPersonnelActiveTab') || 'duty'
 )
 
 // Save active tab to localStorage whenever it changes
 watch(activeTab, (newTab) => {
-  localStorage.setItem(STORAGE_KEY, newTab)
+  save('desPersonnelActiveTab', newTab)
 })
 
 interface DutyRequirementsData {

@@ -36,6 +36,14 @@ interface Props {
   selectorOptions?: any[]
   selectorValue?: string
   showDivider?: boolean
+  // Unit configuration props
+  unitSplit?: { vmu1: number; vmu3: number }
+  initialResources?: {
+    units?: string[]
+    aircraftByUnit?: Record<string, number>
+    staffingByUnit?: Record<string, { pilot?: number; so?: number; intel?: number }>
+    payloadByUnit?: Record<string, Record<string, number>>
+  }
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -58,12 +66,43 @@ function toggleUnit(unit: string) {
 }
 
 // Get unique units from timeline - include all units (even if only rejections)
+// Also include units from initialResources or unitSplit to ensure all configured units are shown
 const units = computed(() => {
-  // Get all unique units from timeline (including rejections)
-  const unitSet = new Set(
-    props.timeline.map(e => e.unit)
-  )
-  return unitSet.size > 0 ? Array.from(unitSet).sort() : []
+  const unitSet = new Set<string>()
+  
+  // First, add units from timeline events (missions, rejections, etc.)
+  for (const event of props.timeline) {
+    if (event.unit) {
+      unitSet.add(event.unit)
+    }
+  }
+  
+  // Also add units from initialResources if available
+  if (props.initialResources?.units) {
+    for (const unit of props.initialResources.units) {
+      // Only add units with non-zero mission split
+      if (unit === 'VMU-1' && props.unitSplit && props.unitSplit.vmu1 > 0) {
+        unitSet.add(unit)
+      } else if (unit === 'VMU-3' && props.unitSplit && props.unitSplit.vmu3 > 0) {
+        unitSet.add(unit)
+      } else if (unit !== 'VMU-1' && unit !== 'VMU-3') {
+        // Add other units as-is
+        unitSet.add(unit)
+      }
+    }
+  }
+  
+  // Fallback: add units from unitSplit if initialResources not available
+  if (unitSet.size === 0 && props.unitSplit) {
+    if (props.unitSplit.vmu1 > 0) {
+      unitSet.add('VMU-1')
+    }
+    if (props.unitSplit.vmu3 > 0) {
+      unitSet.add('VMU-3')
+    }
+  }
+  
+  return Array.from(unitSet).sort()
 })
 
 // Get events for a specific unit (excluding rejections)

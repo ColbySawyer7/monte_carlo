@@ -127,9 +127,10 @@ function aggregateObject(iterations, path) {
 }
 
 /**
- * Calculate round-robin value for a simulated setting.
+ * Step algorithm: Calculate round-robin value for a simulated setting.
  * 
  * Starts at default value, increments by step until max, then wraps to min.
+ * This is a simple deterministic algorithm that cycles through all possible values.
  * 
  * @param {number} iterationIndex - Zero-based iteration index
  * @param {number} defaultValue - Starting/default value
@@ -138,7 +139,7 @@ function aggregateObject(iterations, path) {
  * @param {number} step - Step size
  * @returns {number} - The value for this iteration
  */
-function calculateRoundRobinValue(iterationIndex, defaultValue, min, max, step) {
+function calculateStepValue(iterationIndex, defaultValue, min, max, step) {
   // Calculate total number of possible values
   const totalValues = Math.floor((max - min) / step) + 1;
   
@@ -156,14 +157,223 @@ function calculateRoundRobinValue(iterationIndex, defaultValue, min, max, step) 
 }
 
 /**
+ * Sample from a Beta distribution using Gamma distribution method.
+ * 
+ * Beta(α, β) can be generated as: X / (X + Y) where X ~ Gamma(α, 1) and Y ~ Gamma(β, 1)
+ * 
+ * @param {number} alpha - Shape parameter α > 0
+ * @param {number} beta - Shape parameter β > 0
+ * @returns {number} - Random sample from Beta(α, β) distribution [0, 1]
+ */
+function sampleBeta(alpha, beta) {
+  // Generate two independent Gamma samples
+  const x = sampleGamma(alpha, 1);
+  const y = sampleGamma(beta, 1);
+  
+  // Beta = X / (X + Y)
+  const betaSample = x / (x + y);
+  
+  // Handle edge cases (shouldn't happen with proper parameters, but safety check)
+  if (!isFinite(betaSample) || betaSample < 0 || betaSample > 1) {
+    // Fallback: return uniform random if something goes wrong
+    return Math.random();
+  }
+  
+  return betaSample;
+}
+
+/**
+ * Sample from a Gamma distribution using Marsaglia and Tsang's method.
+ * 
+ * This is an efficient method for sampling Gamma(α, β) when α >= 1.
+ * For α < 1, we use: Gamma(α, β) = Gamma(α + 1, β) * U^(1/α)
+ * 
+ * @param {number} shape - Shape parameter α > 0
+ * @param {number} scale - Scale parameter β > 0
+ * @returns {number} - Random sample from Gamma(α, β) distribution
+ */
+function sampleGamma(shape, scale) {
+  if (shape <= 0 || scale <= 0) {
+    throw new Error(`Gamma parameters must be positive: shape=${shape}, scale=${scale}`);
+  }
+  
+  // Handle α < 1 case
+  if (shape < 1) {
+    // Gamma(α, β) = Gamma(α + 1, β) * U^(1/α)
+    const u = Math.random();
+    return sampleGamma(shape + 1, scale) * Math.pow(u, 1 / shape);
+  }
+  
+  // Marsaglia and Tsang's method for α >= 1
+  const d = shape - 1 / 3;
+  const c = 1 / Math.sqrt(9 * d);
+  
+  while (true) {
+    let x, v;
+    
+    // Generate normal random variable
+    do {
+      x = sampleNormal();
+      v = 1 + c * x;
+    } while (v <= 0);
+    
+    v = v * v * v;
+    const u = Math.random();
+    
+    // Acceptance condition
+    if (u < 1 - 0.0331 * (x * x) * (x * x)) {
+      return d * v * scale;
+    }
+    
+    if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) {
+      return d * v * scale;
+    }
+  }
+}
+
+/**
+ * Sample from a standard normal distribution using Box-Muller transform.
+ * 
+ * @returns {number} - Random sample from N(0, 1)
+ */
+function sampleNormal() {
+  // Box-Muller transform
+  const u1 = Math.random();
+  const u2 = Math.random();
+  const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  return z;
+}
+
+/**
+ * PERT algorithm: Calculate value using Program Evaluation and Review Technique.
+ * 
+ * This algorithm uses a three-point estimation approach (optimistic, most likely, pessimistic)
+ * to generate values that follow a Beta-PERT distribution.
+ * 
+ * Algorithm:
+ * 1. Calculate mean: μ = (a + λm + b) / (λ + 2)
+ * 2. Calculate Beta parameters:
+ *    - α = 1 + λ * (μ - a) / (b - a)
+ *    - β = 1 + λ * (b - μ) / (b - a)
+ * 3. Sample U ~ Beta(α, β)
+ * 4. Transform to variable domain: X = a + U(b - a)
+ * 5. Discretize to step if needed
+ * 
+ * @param {number} iterationIndex - Zero-based iteration index (used for seeding randomness)
+ * @param {number} defaultValue - Starting/default value (most likely, m)
+ * @param {number} min - Minimum value (optimistic, a)
+ * @param {number} max - Maximum value (pessimistic, b)
+ * @param {number} step - Step size (for discretization)
+ * @returns {number} - The value for this iteration
+ */
+function calculatePERTValue(iterationIndex, defaultValue, min, max, step) {
+  // Validate inputs
+  if (min >= max) {
+    console.warn(`PERT: min (${min}) >= max (${max}), returning default value`);
+    return defaultValue;
+  }
+  
+  if (defaultValue < min || defaultValue > max) {
+    console.warn(`PERT: default value (${defaultValue}) outside range [${min}, ${max}], clamping`);
+    const clamped = Math.max(min, Math.min(max, defaultValue));
+    return clamped;
+  }
+  
+  // Shape parameter λ (typically 4 for PERT)
+  const lambda = 4;
+  
+  // Calculate mean: μ = (a + λm + b) / (λ + 2)
+  const mean = (min + lambda * defaultValue + max) / (lambda + 2);
+  
+  // Calculate Beta distribution parameters
+  const range = max - min;
+  const alpha = 1 + lambda * (mean - min) / range;
+  const beta = 1 + lambda * (max - mean) / range;
+  
+  // Sample from Beta distribution
+  // Note: We use iterationIndex to seed randomness, but since each iteration
+  // runs in parallel, we rely on Math.random() which should be sufficiently random
+  const u = sampleBeta(alpha, beta);
+  
+  // Transform to variable domain: X = a + U(b - a)
+  let value = min + u * range;
+  
+  // Discretize to step if needed (round to nearest step)
+  if (step > 0) {
+    value = Math.round(value / step) * step;
+  }
+  
+  // Clamp to ensure value is within bounds (handle floating point precision)
+  value = Math.max(min, Math.min(max, value));
+  
+  return value;
+}
+
+/**
+ * Map frontend override path to backend overrides structure.
+ * 
+ * @param {Array<string>} frontendPath - Frontend path array (e.g., ['simSettings', 'overrides', 'vmu1', 'aircraft'])
+ * @returns {Object|null} - Object with { unit, field, payloadType } or null if not an override path
+ */
+function mapPathToOverrides(frontendPath) {
+  if (!frontendPath || frontendPath.length < 4) return null;
+  
+  // Check if this is an override path: simSettings.overrides.{unit}.{field}
+  if (frontendPath[0] === 'simSettings' && frontendPath[1] === 'overrides') {
+    const unitKey = frontendPath[2]; // 'vmu1' or 'vmu3'
+    const field = frontendPath[3]; // 'aircraft', 'pilot', 'so', 'intel', 'skyTower', etc.
+    
+    if (unitKey !== 'vmu1' && unitKey !== 'vmu3') return null;
+    
+    const unit = unitKey === 'vmu1' ? 'VMU-1' : 'VMU-3';
+    
+    // Map payload field names to payload type names
+    const payloadTypeMap = {
+      'skyTower': 'SkyTower II',
+      'ewPod': 'EW Pod',
+      'smartSensor': 'SmartSensor',
+      'extendedRange': 'Extended Range Tank'
+    };
+    
+    // Check if this is a payload field
+    if (payloadTypeMap[field]) {
+      return {
+        unit,
+        field: 'payload_by_type',
+        payloadType: payloadTypeMap[field]
+      };
+    }
+    
+    // Regular field (aircraft, pilot, so, intel)
+    return {
+      unit,
+      field,
+      payloadType: null
+    };
+  }
+  
+  return null;
+}
+
+/**
  * Map frontend config path to backend scenario path.
  * Converts camelCase to snake_case and handles special mappings.
  * 
  * @param {Array<string>} frontendPath - Frontend path array (e.g., ['simSettings', 'horizonHours'])
- * @returns {Array<string>} - Backend scenario path array (e.g., ['horizon_hours'])
+ * @returns {Array<string>} - Backend scenario path array (e.g., ['horizon_hours']) or empty array if not a scenario path
  */
 function mapPathToScenario(frontendPath) {
   if (!frontendPath || frontendPath.length === 0) return [];
+  
+  // Skip override paths - these are handled separately
+  if (frontendPath[0] === 'simSettings' && frontendPath[1] === 'overrides') {
+    return [];
+  }
+  
+  // Skip iterations - this is a Monte Carlo option, not a scenario setting
+  if (frontendPath[0] === 'simSettings' && frontendPath[1] === 'iterations') {
+    return [];
+  }
   
   // Handle top-level mappings
   if (frontendPath[0] === 'simSettings') {
@@ -261,31 +471,106 @@ function mapPathToScenario(frontendPath) {
 }
 
 /**
- * Apply simulate settings to a scenario by setting values at the specified paths.
+ * Calculate value for a simulated setting using the specified algorithm.
+ * 
+ * @param {string} algorithm - Algorithm to use ('Step' or 'PERT')
+ * @param {number} iterationIndex - Zero-based iteration index
+ * @param {number} defaultValue - Starting/default value
+ * @param {number} min - Minimum value
+ * @param {number} max - Maximum value
+ * @param {number} step - Step size
+ * @returns {number} - The value for this iteration
+ */
+function calculateSimulatedValue(algorithm, iterationIndex, defaultValue, min, max, step) {
+  // Normalize algorithm name (case-insensitive)
+  const algo = (algorithm || 'PERT').toLowerCase();
+  
+  switch (algo) {
+    case 'step':
+      return calculateStepValue(iterationIndex, defaultValue, min, max, step);
+    case 'pert':
+      return calculatePERTValue(iterationIndex, defaultValue, min, max, step);
+    default:
+      console.warn(`Unknown algorithm "${algorithm}", defaulting to Step`);
+      return calculateStepValue(iterationIndex, defaultValue, min, max, step);
+  }
+}
+
+/**
+ * Apply simulate settings to a scenario and overrides by setting values at the specified paths.
  * 
  * @param {Object} scenario - Base scenario (will be cloned)
+ * @param {Object} baseOverrides - Base overrides object (will be cloned if modified)
  * @param {Array} simulateSettings - Array of { path, defaultValue, min, max, step }
  * @param {number} iterationIndex - Zero-based iteration index
- * @returns {Object} - Modified scenario
+ * @param {string} algorithm - Algorithm to use for value calculation ('Step' or 'PERT')
+ * @returns {Object} - Object with { scenario, overrides } containing modified scenario and overrides
  */
-function applySimulateSettings(scenario, simulateSettings, iterationIndex) {
+function applySimulateSettings(scenario, baseOverrides, simulateSettings, iterationIndex, algorithm = 'PERT') {
   if (!simulateSettings || simulateSettings.length === 0) {
-    return scenario;
+    return { scenario, overrides: baseOverrides };
   }
   
-  // Deep clone scenario to avoid mutating the original
+  // Deep clone scenario and overrides to avoid mutating the originals
   const modifiedScenario = JSON.parse(JSON.stringify(scenario));
+  
+  // Check if we need to create/modify overrides
+  const hasOverrideSettings = simulateSettings.some(s => {
+    const overrideMapping = mapPathToOverrides(s.path);
+    return overrideMapping !== null;
+  });
+  
+  // If no override settings to simulate, return baseOverrides unchanged
+  if (!hasOverrideSettings) {
+    return { scenario: modifiedScenario, overrides: baseOverrides };
+  }
+  
+  // Create or clone overrides structure
+  const modifiedOverrides = baseOverrides ? JSON.parse(JSON.stringify(baseOverrides)) : { units: {} };
+  
+  // Ensure units structure exists
+  if (!modifiedOverrides.units) {
+    modifiedOverrides.units = {};
+  }
   
   for (const setting of simulateSettings) {
     const { path, defaultValue, min, max, step } = setting;
     
-    // Calculate the round-robin value for this iteration
-    const value = calculateRoundRobinValue(iterationIndex, defaultValue, min, max, step);
+    // Calculate the value for this iteration using the selected algorithm
+    const value = calculateSimulatedValue(algorithm, iterationIndex, defaultValue, min, max, step);
+    
+    // Check if this is an override path
+    const overrideMapping = mapPathToOverrides(path);
+    if (overrideMapping) {
+      const { unit, field, payloadType } = overrideMapping;
+      
+      // Ensure unit structure exists
+      if (!modifiedOverrides.units[unit]) {
+        modifiedOverrides.units[unit] = {};
+      }
+      
+      // Handle payload fields
+      if (payloadType) {
+        if (!modifiedOverrides.units[unit].payload_by_type) {
+          modifiedOverrides.units[unit].payload_by_type = {};
+        }
+        modifiedOverrides.units[unit].payload_by_type[payloadType] = value;
+      } else {
+        // Regular field (aircraft, pilot, so, intel)
+        modifiedOverrides.units[unit][field] = value;
+      }
+      
+      continue;
+    }
     
     // Map frontend path to backend scenario path
     const scenarioPath = mapPathToScenario(path);
     
     if (scenarioPath.length === 0) {
+      // Skip warnings for known non-scenario paths (iterations, etc.)
+      if (path[0] === 'simSettings' && path[1] === 'iterations') {
+        continue; // iterations is a Monte Carlo option, not a scenario setting
+      }
       console.warn(`Warning: Could not map path ${path.join('.')} to scenario structure, skipping`);
       continue;
     }
@@ -328,7 +613,7 @@ function applySimulateSettings(scenario, simulateSettings, iterationIndex) {
     }
   }
   
-  return modifiedScenario;
+  return { scenario: modifiedScenario, overrides: modifiedOverrides };
 }
 
 /**
@@ -399,9 +684,10 @@ async function runSingleWithRetry(workerPath, scenario, settings, maxRetries = 2
  * @param {number} batchSize - Number of simulations to run in this batch
  * @param {number} batchStartIndex - Zero-based index of the first iteration in this batch
  * @param {Array} simulateSettings - Optional array of settings to vary across iterations
+ * @param {string} algorithm - Algorithm to use for value calculation ('Step' or 'PERT')
  * @returns {Promise<Array>} Array of simulation results (guaranteed to have batchSize results)
  */
-async function runBatch(scenario, settings, batchSize, batchStartIndex = 0, simulateSettings = null) {
+async function runBatch(scenario, settings, batchSize, batchStartIndex = 0, simulateSettings = null, algorithm = 'PERT') {
   const workerPath = path.join(__dirname, 'worker.js');
   const results = [];
   const retries = [];
@@ -411,13 +697,27 @@ async function runBatch(scenario, settings, batchSize, batchStartIndex = 0, simu
   for (let i = 0; i < batchSize; i++) {
     const iterationIndex = batchStartIndex + i;
     
-    // Apply simulate settings to create a modified scenario for this iteration
-    const modifiedScenario = simulateSettings 
-      ? applySimulateSettings(scenario, simulateSettings, iterationIndex)
-      : scenario;
+    // Apply simulate settings to create modified scenario and overrides for this iteration
+    let modifiedScenario = scenario;
+    let modifiedSettings = settings;
+    
+    if (simulateSettings) {
+      const { scenario: modScenario, overrides: modOverrides } = applySimulateSettings(
+        scenario, 
+        settings.overrides || null, 
+        simulateSettings, 
+        iterationIndex, 
+        algorithm
+      );
+      modifiedScenario = modScenario;
+      modifiedSettings = {
+        ...settings,
+        overrides: modOverrides
+      };
+    }
     
     promises.push(
-      runSingleWithRetry(workerPath, modifiedScenario, settings)
+      runSingleWithRetry(workerPath, modifiedScenario, modifiedSettings)
         .then(result => ({ success: true, result, index: i }))
         .catch(error => ({ success: false, error, index: i }))
     );
@@ -441,12 +741,26 @@ async function runBatch(scenario, settings, batchSize, batchStartIndex = 0, simu
     const retryIterationIndex = batchStartIndex + retry.index;
     
     // Apply simulate settings for retry as well
-    const retryScenario = simulateSettings 
-      ? applySimulateSettings(scenario, simulateSettings, retryIterationIndex)
-      : scenario;
+    let retryScenario = scenario;
+    let retrySettings = settings;
+    
+    if (simulateSettings) {
+      const { scenario: modScenario, overrides: modOverrides } = applySimulateSettings(
+        scenario, 
+        settings.overrides || null, 
+        simulateSettings, 
+        retryIterationIndex, 
+        algorithm
+      );
+      retryScenario = modScenario;
+      retrySettings = {
+        ...settings,
+        overrides: modOverrides
+      };
+    }
     
     try {
-      const result = await runSingleWithRetry(workerPath, retryScenario, settings, 3); // Extra retries for failed ones
+      const result = await runSingleWithRetry(workerPath, retryScenario, retrySettings, 3); // Extra retries for failed ones
       results.push(result);
     } catch (error) {
       console.error(`Failed to retry simulation after multiple attempts: ${error.message}`);
@@ -474,16 +788,19 @@ async function runBatch(scenario, settings, batchSize, batchStartIndex = 0, simu
  * @param {Object} scenario - Scenario configuration (same as DES engine)
  * @param {Object} options - Options including:
  *   - iterations: Number of Monte Carlo iterations (default: 1000)
+ *   - algorithm: Algorithm to use for value calculation ('Step' or 'PERT', default: 'PERT')
  *   - keepIterations: Whether to store individual iteration results (default: false)
  *   - state: State snapshot (required, same as DES)
  *   - overrides: Resource overrides (optional, same as DES)
  *   - maxConcurrent: Maximum concurrent workers (default: CPU_COUNT - 1)
  *   - logLevel: DES log level for workers ('silent', 'error', 'warn', 'info', 'verbose', 'debug')
  *                Defaults to 'silent' to prevent log clutter during Monte Carlo runs
+ *   - simulateSettings: Optional array of settings to vary across iterations
  * @returns {Object} - Aggregated Monte Carlo results with percentiles
  */
 async function runMonteCarlo(scenario, options = {}) {
   const iterations = options.iterations || 1000;
+  const algorithm = options.algorithm || 'PERT';
   const keepIterations = options.keepIterations || false;
   const maxConcurrent = options.maxConcurrent || WORKER_POOL_SIZE;
   const simulateSettings = options.simulateSettings || null;
@@ -500,7 +817,7 @@ async function runMonteCarlo(scenario, options = {}) {
   
   // Log simulate settings if present
   if (simulateSettings && simulateSettings.length > 0) {
-    console.log(`Simulating ${simulateSettings.length} setting(s) with round-robin values:`);
+    console.log(`Simulating ${simulateSettings.length} setting(s) using ${algorithm} algorithm:`);
     for (const setting of simulateSettings) {
       console.log(`  - ${setting.pathString}: default=${setting.defaultValue}, range=[${setting.min}, ${setting.max}], step=${setting.step}`);
     }
@@ -523,7 +840,7 @@ async function runMonteCarlo(scenario, options = {}) {
     
     try {
       // Run batch of simulations in parallel
-      const batchResults = await runBatch(scenario, settings, currentBatchSize, batchStartIndex, simulateSettings);
+      const batchResults = await runBatch(scenario, settings, currentBatchSize, batchStartIndex, simulateSettings, algorithm);
       individualResults.push(...batchResults);
       
       // Progress logging with time estimates
@@ -644,17 +961,27 @@ async function runMonteCarlo(scenario, options = {}) {
     }
     
     // Map percentiles to indices
+    // Note: sortedIndices is sorted ascending (lowest to highest missions completed)
+    // We use the same percentile calculation method as calculatePercentiles for consistency:
+    // index = Math.ceil((p / 100) * n) - 1, clamped to valid range
+    // This ensures we select the iteration whose missions.completed value matches the percentile
+    const getPercentileIndex = (percentile) => {
+      // percentile is 0-100 (e.g., 50 for P50)
+      const index = Math.ceil((percentile / 100) * sortedIndices.length) - 1;
+      return Math.max(0, Math.min(sortedIndices.length - 1, index));
+    };
+    
     const percentileMap = {
       mean: meanIndex,
-      min: sortedIndices[0],
-      max: sortedIndices[sortedIndices.length - 1],
-      p10: sortedIndices[Math.floor(sortedIndices.length * 0.10)],
-      p25: sortedIndices[Math.floor(sortedIndices.length * 0.25)],
-      p50: sortedIndices[Math.floor(sortedIndices.length * 0.50)],
-      p75: sortedIndices[Math.floor(sortedIndices.length * 0.75)],
-      p90: sortedIndices[Math.floor(sortedIndices.length * 0.90)],
-      p95: sortedIndices[Math.floor(sortedIndices.length * 0.95)],
-      p99: sortedIndices[Math.floor(sortedIndices.length * 0.99)]
+      min: sortedIndices[0],  // Worst outcome (lowest missions)
+      max: sortedIndices[sortedIndices.length - 1],  // Best outcome (highest missions)
+      p10: sortedIndices[getPercentileIndex(90)],  // Optimistic: 90th percentile (10% did better)
+      p25: sortedIndices[getPercentileIndex(75)],  // 75th percentile (25% did better)
+      p50: sortedIndices[getPercentileIndex(50)],  // Median: 50th percentile
+      p75: sortedIndices[getPercentileIndex(25)],  // 25th percentile (75% did better)
+      p90: sortedIndices[getPercentileIndex(10)],  // Pessimistic: 10th percentile (90% did better)
+      p95: sortedIndices[getPercentileIndex(5)],   // Very pessimistic: 5th percentile (95% did better)
+      p99: sortedIndices[getPercentileIndex(1)]    // Extremely pessimistic: 1st percentile (99% did better)
     };
     
     // Extract timelines for each percentile
@@ -662,11 +989,35 @@ async function runMonteCarlo(scenario, options = {}) {
       const iterIndex = percentileMap[key];
       if (iterIndex !== undefined && individualResults[iterIndex]) {
         const iter = individualResults[iterIndex];
+        const timeline = iter.timeline || [];
+        const missionsCompleted = iter.missions?.completed || 0;
+        
+        // Debug: Log percentile selection details
+        const sortedIndex = sortedIndices.indexOf(iterIndex);
+        console.log(`Percentile ${key}: selected iteration ${iterIndex} (position ${sortedIndex}/${sortedIndices.length - 1} in sorted array) with ${missionsCompleted} missions completed`);
+        
+        // Debug: Count missions by unit for this percentile
+        const unitsInTimeline = new Set();
+        const missionsByUnit = {};
+        for (const item of timeline) {
+          if (item.type === 'mission' && item.unit) {
+            unitsInTimeline.add(item.unit);
+            missionsByUnit[item.unit] = (missionsByUnit[item.unit] || 0) + 1;
+          }
+        }
+        
+        if (unitsInTimeline.size > 0) {
+          console.log(`  Units in timeline: ${Array.from(unitsInTimeline).join(', ')}`);
+          console.log(`  Missions by unit:`, missionsByUnit);
+        } else if (missionsCompleted > 0) {
+          console.warn(`  WARNING: missionsCompleted=${missionsCompleted} but no missions found in timeline!`);
+        }
+        
         percentileTimelines[key] = {
-          timeline: iter.timeline || [],
-          rawTimeline: iter.timeline || [], // Same as timeline for now
+          timeline: timeline,
+          rawTimeline: timeline, // Same as timeline for now
           availabilityTimeline: iter.availability_timeline || null,
-          missionsCompleted: iter.missions?.completed || 0,
+          missionsCompleted: missionsCompleted,
           stddev: aggregated.missions?.completed?.stddev || 0
         };
       }
@@ -677,8 +1028,11 @@ async function runMonteCarlo(scenario, options = {}) {
   
   // Optionally include individual iterations
   // WARNING: This can be memory-intensive for large iteration counts
+  // Only include minimal data (missions.completed) to avoid JSON stringify errors
   if (keepIterations) {
-    aggregated.iterations = individualResults;
+    aggregated.iterations = individualResults.map(iter => ({
+      missions: iter.missions ? { completed: iter.missions.completed } : undefined
+    }));
   }
   
   // Include initial resources from first iteration (same across all iterations)

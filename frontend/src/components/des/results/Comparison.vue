@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // TODO: review this file for cleanup and optimization
 import { ref, computed, onMounted } from 'vue'
+import { load, save } from '../../../composables/useLocalStorage'
 
 interface SimResults {
   missions: {
@@ -60,20 +61,15 @@ const editingName = ref('')
 
 // Load saved results from localStorage
 onMounted(() => {
-  const stored = localStorage.getItem('desComparisonResults')
+  const stored = load<SavedResult[]>('desComparisonResults')
   if (stored) {
-    try {
-      savedResults.value = JSON.parse(stored)
-    } catch (e) {
-      console.error('Failed to load saved results:', e)
-      savedResults.value = []
-    }
+    savedResults.value = stored
   }
 })
 
 // Save results to localStorage
 function saveToLocalStorage() {
-  localStorage.setItem('desComparisonResults', JSON.stringify(savedResults.value))
+  save('desComparisonResults', savedResults.value)
 }
 
 // Save current results
